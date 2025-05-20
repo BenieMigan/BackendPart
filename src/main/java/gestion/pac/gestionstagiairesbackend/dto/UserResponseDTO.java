@@ -1,34 +1,20 @@
-package gestion.pac.gestionstagiairesbackend.entite;
+package gestion.pac.gestionstagiairesbackend.dto;
 
+import gestion.pac.gestionstagiairesbackend.entite.User;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
-@Entity
-@Table(name = "users") // sans guillemets cette fois
-public class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class UserResponseDTO {
 
+    private Long id;
     private String civilite;
     private String nom;
     private String prenom;
-
-    private String telephone;
-    @Column(unique = true)
     private String email;
-    @Column(name = "last_login")
-    private LocalDateTime lastLogin;
-
-
-    private String password;
-    private String role = "STAGIAIRE"; // ou "RH"
-
     private String contactUrgent;
-    private String ficheAssurancePath; // Chemin vers le fichier uploadé
+
     @ElementCollection
     private List<String> directions;
 
@@ -41,25 +27,23 @@ public class User {
     private String message;
     private String statut = "EN_ATTENTE"; // Valeur par défaut
     private String filiere;        // Ex: "Informatique, Réseaux et Télécommunication"
-    private String anneeAcademique; // Ex: "3ème année de Licence Professionnelle"
+    private String anneeAcademique;
+    private String telephone; // Ex: "3ème année de Licence Professionnelle"
     private LocalDate dateDebut; //
     private LocalDate dateFin;
-    private String genre; // "F" ou "M"
-    private LocalDateTime dateSoumission;;
+    private String ficheAssurancePath; // Chemin vers le fichier uploadé
 
 
-    public User() {
+    public UserResponseDTO() {
     }
 
 
-    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission,String telephone) {
+    public UserResponseDTO(Long id, String civilite, String nom, String prenom, String email, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath,String telephone) {
         this.id = id;
         this.civilite = civilite;
         this.nom = nom;
         this.prenom = prenom;
         this.email = email;
-        this.password = password;
-        this.role = role;
         this.contactUrgent = contactUrgent;
         this.directions = directions;
         this.cvPath = cvPath;
@@ -75,11 +59,7 @@ public class User {
         this.dateDebut = dateDebut;
         this.dateFin = dateFin;
         this.ficheAssurancePath = ficheAssurancePath;
-        this.lastLogin = lastLogin;
-        this.dateSoumission = dateSoumission;
         this.telephone = telephone;
-
-
 
 
     }
@@ -118,22 +98,6 @@ public class User {
 
     public String getEmail() {
         return email;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
     }
 
     public void setEmail(String email) {
@@ -252,36 +216,12 @@ public class User {
         this.dateFin = dateFin;
     }
 
-    public String getGenre() {
-        return genre;
-    }
-
-    public void setGenre(String genre) {
-        this.genre = genre;
-    }
-
     public String getFicheAssurancePath() {
         return ficheAssurancePath;
     }
 
     public void setFicheAssurancePath(String ficheAssurancePath) {
         this.ficheAssurancePath = ficheAssurancePath;
-    }
-
-    public LocalDateTime getLastLogin() {
-        return lastLogin;
-    }
-
-    public void setLastLogin(LocalDateTime lastLogin) {
-        this.lastLogin = lastLogin;
-    }
-
-    public LocalDateTime getDateSoumission() {
-        return dateSoumission;
-    }
-
-    public void setDateSoumission(LocalDateTime dateSoumission) {
-        this.dateSoumission = dateSoumission;
     }
 
     public String getTelephone() {

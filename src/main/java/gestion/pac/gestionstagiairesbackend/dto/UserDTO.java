@@ -1,39 +1,27 @@
-package gestion.pac.gestionstagiairesbackend.entite;
+package gestion.pac.gestionstagiairesbackend.dto;
 
-import jakarta.persistence.*;
+import gestion.pac.gestionstagiairesbackend.entite.User;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
-@Entity
-@Table(name = "users") // sans guillemets cette fois
-public class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
 
+public class UserDTO {
+
+    private Long id;
     private String civilite;
     private String nom;
     private String prenom;
-
-    private String telephone;
-    @Column(unique = true)
     private String email;
-    @Column(name = "last_login")
-    private LocalDateTime lastLogin;
-
-
-    private String password;
-    private String role = "STAGIAIRE"; // ou "RH"
-
     private String contactUrgent;
-    private String ficheAssurancePath; // Chemin vers le fichier uploadé
     @ElementCollection
     private List<String> directions;
-
-    private String cvPath;
-    private String lettrePath;
+    private MultipartFile cv;
+    private MultipartFile lettre;
     private Boolean consentement = false; // Changé de boolean à Boolean
     private String typeStage;
     private String nomEtablissement;
@@ -44,26 +32,23 @@ public class User {
     private String anneeAcademique; // Ex: "3ème année de Licence Professionnelle"
     private LocalDate dateDebut; //
     private LocalDate dateFin;
-    private String genre; // "F" ou "M"
-    private LocalDateTime dateSoumission;;
+
+    private String telephone;
 
 
-    public User() {
+    public UserDTO() {
     }
 
-
-    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission,String telephone) {
+    public UserDTO(Long id, String civilite, String nom, String prenom, String email, String contactUrgent, List<String> directions, MultipartFile cv, MultipartFile lettre, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin,String telephone) {
         this.id = id;
         this.civilite = civilite;
         this.nom = nom;
         this.prenom = prenom;
         this.email = email;
-        this.password = password;
-        this.role = role;
         this.contactUrgent = contactUrgent;
         this.directions = directions;
-        this.cvPath = cvPath;
-        this.lettrePath = lettrePath;
+        this.cv = cv;
+        this.lettre = lettre;
         this.consentement = consentement;
         this.typeStage = typeStage;
         this.nomEtablissement = nomEtablissement;
@@ -74,15 +59,10 @@ public class User {
         this.anneeAcademique = anneeAcademique;
         this.dateDebut = dateDebut;
         this.dateFin = dateFin;
-        this.ficheAssurancePath = ficheAssurancePath;
-        this.lastLogin = lastLogin;
-        this.dateSoumission = dateSoumission;
         this.telephone = telephone;
 
-
-
-
     }
+
 
     public Long getId() {
         return id;
@@ -120,22 +100,6 @@ public class User {
         return email;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
     public void setEmail(String email) {
         this.email = email;
     }
@@ -156,20 +120,20 @@ public class User {
         this.directions = directions;
     }
 
-    public String getCvPath() {
-        return cvPath;
+    public MultipartFile getCv() {
+        return cv;
     }
 
-    public void setCvPath(String cvPath) {
-        this.cvPath = cvPath;
+    public void setCv(MultipartFile cv) {
+        this.cv = cv;
     }
 
-    public String getLettrePath() {
-        return lettrePath;
+    public MultipartFile getLettre() {
+        return lettre;
     }
 
-    public void setLettrePath(String lettrePath) {
-        this.lettrePath = lettrePath;
+    public void setLettre(MultipartFile lettre) {
+        this.lettre = lettre;
     }
 
     public Boolean getConsentement() {
@@ -250,38 +214,6 @@ public class User {
 
     public void setDateFin(LocalDate dateFin) {
         this.dateFin = dateFin;
-    }
-
-    public String getGenre() {
-        return genre;
-    }
-
-    public void setGenre(String genre) {
-        this.genre = genre;
-    }
-
-    public String getFicheAssurancePath() {
-        return ficheAssurancePath;
-    }
-
-    public void setFicheAssurancePath(String ficheAssurancePath) {
-        this.ficheAssurancePath = ficheAssurancePath;
-    }
-
-    public LocalDateTime getLastLogin() {
-        return lastLogin;
-    }
-
-    public void setLastLogin(LocalDateTime lastLogin) {
-        this.lastLogin = lastLogin;
-    }
-
-    public LocalDateTime getDateSoumission() {
-        return dateSoumission;
-    }
-
-    public void setDateSoumission(LocalDateTime dateSoumission) {
-        this.dateSoumission = dateSoumission;
     }
 
     public String getTelephone() {

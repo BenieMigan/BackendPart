@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Note de Service</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .logo { width: 100px; height: auto; }
+        .title { font-weight: bold; text-decoration: underline; margin: 20px 0; }
+        .content { margin: 20px 0; line-height: 1.5; }
+        .signature { margin-top: 50px; text-align: right; }
+        .footer { margin-top: 50px; font-size: 0.8em; text-align: center; }
+        .ampliations { margin-top: 30px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <img th:src="@{/images/pac-logo.png}" alt="Logo PAC" class="logo">
+    <div>PORT AUTONOME DE COTONOU</div>
+    <div>DIRECTION GENERALE</div>
+    <div>DIRECTION DE L’ADMINISTRATION ET DES FINANCES</div>
+    <div>DEPARTEMENT DES RESSOURCES HUMAINES</div>
+</div>
+
+<div class="title">
+    NOTE DE SERVICE N° <span th:text="${noteNumber}"></span><br>
+    Portant stage académique de <span th:text="${user.civilite}"></span> <span th:text="${user.nom.toUpperCase()}"></span> <span th:text="${user.prenom}"></span>.-
+</div>
+
+<div class="content">
+    <p>
+        <span th:text="${user.civilite}"></span> <span th:text="${user.nom.toUpperCase()}"></span> <span th:text="${user.prenom}"></span>,
+        étudiant(e) en <span th:text="${user.anneeAcademique}"></span> de
+        <span th:text="${user.filiere}"></span> à <span th:text="${user.nomEtablissement}"></span>,
+        est autorisé(e) à effectuer un stage académique non rémunéré et non renouvelable au Port Autonome de Cotonou
+        du <span th:text="${#temporals.format(user.dateDebut, 'EEEE dd MMMM yyyy')}"></span> au
+        <span th:text="${#temporals.format(user.dateFin, 'EEEE dd MMMM yyyy')}"></span>.
+    </p>
+
+    <p>
+        Le Chef du Département des <span th:text="${user.directions[0]}"></span> est chargé de l'encadrement de ce(tte) stagiaire
+        qui devra produire un rapport à la fin de son stage.
+    </p>
+</div>
+
+<div class="signature">
+    <p>COTONOU, LE <span th:text="${#temporals.format(#dates.createNow(), 'dd/MM/yyyy')}"></span></p>
+    <p>POUR LE DIRECTEUR GENERAL</p>
+    <p>DU PORT AUTONOME DE COTONOU & P.D.</p>
+    <p>LA CHEFFE DU DEPARTEMENT DES RESSOURCES HUMAINES,</p>
+    <br><br>
+    <p>Arias Frosine ADANHODE GBAGUIDI</p>
+</div>
+
+<div class="ampliations">
+    <p>AMPLIATIONS</p>
+    <p>Directions 9 Arch 1</p>
+    <p>Départ 16 Aff 1</p>
+    <p>Synd 1 Int 1</p>
+    <p>DP 1</p>
+</div>
+
+<div class="footer">
+    Direction Générale du Port Autonome de Cotonou<br>
+    BP 927 Boulevard de la Marina, Cotonou - Bénin<br>
+    +229 21 31 52 80 contact@pac.bj<br>
+    www.portdecotonou.bj
+</div>
+</body>
+</html>

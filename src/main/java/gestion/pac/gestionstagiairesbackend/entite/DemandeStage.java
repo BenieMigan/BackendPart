@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Table(name = "users") // sans guillemets cette fois
-public class User {
+public class DemandeStage {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -17,7 +17,6 @@ public class User {
     private String nom;
     private String prenom;
 
-    private String telephone;
     @Column(unique = true)
     private String email;
     @Column(name = "last_login")
@@ -45,22 +44,20 @@ public class User {
     private LocalDate dateDebut; //
     private LocalDate dateFin;
     private String genre; // "F" ou "M"
-    private LocalDateTime dateSoumission;;
+    private LocalDateTime dateSoumission;
 
 
-    public User() {
-    }
-
-
-    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission,String telephone) {
+    public DemandeStage(Long id, String civilite, String nom, String prenom, String email, LocalDateTime lastLogin, String password, String role, String contactUrgent, String ficheAssurancePath, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String genre, LocalDateTime dateSoumission) {
         this.id = id;
         this.civilite = civilite;
         this.nom = nom;
         this.prenom = prenom;
         this.email = email;
+        this.lastLogin = lastLogin;
         this.password = password;
         this.role = role;
         this.contactUrgent = contactUrgent;
+        this.ficheAssurancePath = ficheAssurancePath;
         this.directions = directions;
         this.cvPath = cvPath;
         this.lettrePath = lettrePath;
@@ -74,14 +71,8 @@ public class User {
         this.anneeAcademique = anneeAcademique;
         this.dateDebut = dateDebut;
         this.dateFin = dateFin;
-        this.ficheAssurancePath = ficheAssurancePath;
-        this.lastLogin = lastLogin;
+        this.genre = genre;
         this.dateSoumission = dateSoumission;
-        this.telephone = telephone;
-
-
-
-
     }
 
     public Long getId() {
@@ -120,6 +111,18 @@ public class User {
         return email;
     }
 
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public LocalDateTime getLastLogin() {
+        return lastLogin;
+    }
+
+    public void setLastLogin(LocalDateTime lastLogin) {
+        this.lastLogin = lastLogin;
+    }
+
     public String getPassword() {
         return password;
     }
@@ -136,16 +139,20 @@ public class User {
         this.role = role;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
     public String getContactUrgent() {
         return contactUrgent;
     }
 
     public void setContactUrgent(String contactUrgent) {
         this.contactUrgent = contactUrgent;
+    }
+
+    public String getFicheAssurancePath() {
+        return ficheAssurancePath;
+    }
+
+    public void setFicheAssurancePath(String ficheAssurancePath) {
+        this.ficheAssurancePath = ficheAssurancePath;
     }
 
     public List<String> getDirections() {
@@ -260,35 +267,11 @@ public class User {
         this.genre = genre;
     }
 
-    public String getFicheAssurancePath() {
-        return ficheAssurancePath;
-    }
-
-    public void setFicheAssurancePath(String ficheAssurancePath) {
-        this.ficheAssurancePath = ficheAssurancePath;
-    }
-
-    public LocalDateTime getLastLogin() {
-        return lastLogin;
-    }
-
-    public void setLastLogin(LocalDateTime lastLogin) {
-        this.lastLogin = lastLogin;
-    }
-
     public LocalDateTime getDateSoumission() {
         return dateSoumission;
     }
 
     public void setDateSoumission(LocalDateTime dateSoumission) {
         this.dateSoumission = dateSoumission;
-    }
-
-    public String getTelephone() {
-        return telephone;
-    }
-
-    public void setTelephone(String telephone) {
-        this.telephone = telephone;
     }
 }
