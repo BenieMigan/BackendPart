@@ -18,7 +18,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.GeneralSecurityException;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Collections;
+import java.util.Date;
 
 @Service
 public class GoogleCalendarService {
@@ -32,6 +35,11 @@ public class GoogleCalendarService {
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 
     public void addDemandeStageEvent(User stagiaire) throws IOException, GeneralSecurityException {
+        // Ne créer l'événement que si le dossier est finalisé
+        if (!"DOCUMENT_COMPLET".equals(stagiaire.getStatut())) {
+            return;
+        }
+
         final NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
 
         try (InputStream in = getCredentialsStream()) {
@@ -45,23 +53,29 @@ public class GoogleCalendarService {
                     .setApplicationName("Gestion Stagiaires")
                     .build();
 
-            String eventTitle = String.format("[%s] Demande de %s %s",
-                    stagiaire.getStatut(),
+            String eventTitle = String.format("Stage de %s %s (%s)",
                     stagiaire.getPrenom(),
-                    stagiaire.getNom());
+                    stagiaire.getNom(),
+                    stagiaire.getTypeStage());
 
             Event event = new Event()
                     .setSummary(eventTitle)
                     .setDescription(buildEventDescription(stagiaire));
 
+            // Convertir LocalDate en Date pour Google Calendar
+            Date startDate = Date.from(stagiaire.getDateDebut()
+                    .atStartOfDay(ZoneId.of("Africa/Casablanca")).toInstant());
+            Date endDate = Date.from(stagiaire.getDateFin()
+                    .plusDays(1) // Ajouter un jour pour inclure le dernier jour
+                    .atStartOfDay(ZoneId.of("Africa/Casablanca")).toInstant());
+
             EventDateTime start = new EventDateTime()
-                    .setDateTime(new com.google.api.client.util.DateTime(stagiaire.getDateSoumission().toString()))
+                    .setDate(new com.google.api.client.util.DateTime(startDate))
                     .setTimeZone("Africa/Casablanca");
             event.setStart(start);
 
             EventDateTime end = new EventDateTime()
-                    .setDateTime(new com.google.api.client.util.DateTime(
-                            stagiaire.getDateSoumission().plusHours(1).toString()))
+                    .setDate(new com.google.api.client.util.DateTime(endDate))
                     .setTimeZone("Africa/Casablanca");
             event.setEnd(end);
 
@@ -81,23 +95,35 @@ public class GoogleCalendarService {
 
     private String buildEventDescription(User stagiaire) {
         return String.format(
-                "Type: %s\nFilière: %s\nÉtablissement: %s\nEmail: %s\nStatut: %s",
+                "Stagiaire: %s %s\n" +
+                        "Type: %s\n" +
+                        "Filière: %s\n" +
+                        "Établissement: %s\n" +
+                        "Email: %s\n" +
+                        "Téléphone: %s\n" +
+                        "Période: %s au %s",
+                stagiaire.getPrenom(),
+                stagiaire.getNom(),
                 stagiaire.getTypeStage(),
                 stagiaire.getFiliere(),
                 stagiaire.getNomEtablissement(),
                 stagiaire.getEmail(),
-                stagiaire.getStatut()
+                stagiaire.getTelephone(),
+                stagiaire.getDateDebut(),
+                stagiaire.getDateFin()
         );
     }
 
     private Event setEventColor(Event event, String statut) {
         switch (statut) {
-            case "VALIDEE":
+            case "DOCUMENT_COMPLET":
                 return event.setColorId("2"); // Vert
+            case "VALIDEE":
+                return event.setColorId("5"); // Jaune
             case "REJETEE":
                 return event.setColorId("4"); // Rouge
             default:
-                return event.setColorId("5"); // Jaune
+                return event.setColorId("11"); // Gris
         }
     }
 }

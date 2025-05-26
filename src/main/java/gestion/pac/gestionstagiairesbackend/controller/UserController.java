@@ -104,12 +104,7 @@ public class UserController {
                 }
             }
 
-            // Mise à jour des places occupées
-            for (String directionNom : userDTO.getDirections()) {
-                Direction direction = directionRepository.findByNom(directionNom).get();
-                direction.setPlacesOccupees(direction.getPlacesOccupees() + 1);
-                directionRepository.save(direction);
-            }
+
 
             // Mise à jour des informations utilisateur
             connectedUser.setCivilite(userDTO.getCivilite());
@@ -253,6 +248,14 @@ public class UserController {
             user.setFicheAssurancePath(ficheAssurancePath);
             user.setStatut("DOCUMENT_COMPLET"); // Mise à jour du statut
 
+            // Mise à jour des places occupées dans les directions
+            for (String directionNom : user.getDirections()) {
+                Direction direction = directionRepository.findByNom(directionNom)
+                        .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
+                direction.setPlacesOccupees(direction.getPlacesOccupees() + 1);
+                directionRepository.save(direction);
+            }
+
             User updatedUser = userRepository.save(user);
             return ResponseEntity.ok(convertToResponseDTO(updatedUser));
 
@@ -264,8 +267,6 @@ public class UserController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
-
-
     @GetMapping("/validate-finalization-token")
     public ResponseEntity<?> validateFinalizationToken(@RequestParam String token) {
         try {
