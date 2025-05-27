@@ -81,7 +81,7 @@ public class UserController {
             @RequestHeader("Authorization") String authHeader) {
 
         try {
-// Vérification de l'authentification
+            // Vérification de l'authentification
             String token = authHeader.replace("Bearer ", "");
             Long userId = jwtTokenService.validateAndGetUserId(token);
             User connectedUser = userRepository.findById(userId)
@@ -92,7 +92,7 @@ public class UserController {
                         .body("Seuls les stagiaires peuvent faire une demande");
             }
 
-            // Vérification des places disponibles
+            // Vérification des places disponibles pour chaque direction sélectionnée
             for (String directionNom : userDTO.getDirections()) {
                 Direction direction = directionRepository.findByNom(directionNom)
                         .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
@@ -103,6 +103,8 @@ public class UserController {
                                     " - Plus de places disponibles"));
                 }
             }
+
+
 
 
 
@@ -160,7 +162,7 @@ public class UserController {
     public void initDirections() {
         if (directionRepository.count() == 0) {
             List<Direction> directions = List.of(
-                    new Direction("Direction des infrastructures", 5, 0),
+                    new Direction("Direction des infrastructures", 2, 0),
                     new Direction("Direction commerciale et du marketing", 3, 0),
                     new Direction("Direction des ressources humaines", 4, 0),
                     new Direction("Direction des systèmes d'information", 6, 0),
@@ -209,16 +211,21 @@ public class UserController {
     }
 
     @GetMapping("/validate-token")
-    public ResponseEntity<UserResponseDTO> getUserByToken(@RequestParam String token) {
-        Long userId = jwtTokenService.validateAndGetUserId(token);
-        if (userId == null) {
+    public ResponseEntity<UserResponseDTO> getUserByToken(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            return ResponseEntity.ok(convertToResponseDTO(user));
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-        return ResponseEntity.ok(convertToResponseDTO(user));
     }
 
     @PutMapping("/{id}/upload-assurance")
@@ -247,6 +254,13 @@ public class UserController {
             String ficheAssurancePath = fileStorageService.storeFile(file);
             user.setFicheAssurancePath(ficheAssurancePath);
             user.setStatut("DOCUMENT_COMPLET"); // Mise à jour du statut
+
+
+            // Mettre à jour les dates
+            LocalDate now = LocalDate.now();
+            user.setDateDebut(now); // Date de début = date de finalisation
+            user.setDateFin(now.plusMonths(3)); // Date de fin = 3 mois après
+
 
             // Mise à jour des places occupées dans les directions
             for (String directionNom : user.getDirections()) {

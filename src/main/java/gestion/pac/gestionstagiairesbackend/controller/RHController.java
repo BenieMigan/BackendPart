@@ -342,6 +342,7 @@ public class RHController {
     @GetMapping("/dashboard/stats")
     public ResponseEntity<?> getDashboardStats(@RequestHeader("Authorization") String authHeader) {
         try {
+
             // Vérification auth
             String token = authHeader.replace("Bearer ", "");
             Long userId = jwtTokenService.validateAndGetUserId(token);
@@ -363,6 +364,7 @@ public class RHController {
             // Statistiques par département
             List<Map<String, Object>> statsParDepartement = userRepository.getStatsByDepartment();
 
+
             // Notifications pour fins de stage proches (dans les 15 jours)
             LocalDate now = LocalDate.now();
             List<User> finsProches = userRepository.findByDateFinBetweenAndStatut(
@@ -379,8 +381,7 @@ public class RHController {
             response.put("stagiairesFinalises", stagiairesFinalises.stream()
                     .map(this::convertToDashboardDTO)
                     .collect(Collectors.toList()));
-            response.put("statsParDepartement", statsParDepartement);
-            response.put("finsProches", finsProches.stream()
+            response.put("statsParDepartement", statsParDepartement);            response.put("finsProches", finsProches.stream()
                     .map(this::convertToNotificationDTO)
                     .collect(Collectors.toList()));
 
@@ -391,13 +392,17 @@ public class RHController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
-
     private Map<String, Object> convertToDashboardDTO(User user) {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", user.getId());
         dto.put("nomComplet", user.getPrenom() + " " + user.getNom());
-        dto.put("dateDebut", user.getDateDebut());
-        dto.put("dateFin", user.getDateFin());
+
+        // Utiliser la date de soumission comme date de début
+        dto.put("dateDebut", user.getDateSoumission().toLocalDate()); // Convertir LocalDateTime en LocalDate
+
+        // Calculer la date de fin (3 mois après la date de début)
+        dto.put("dateFin", user.getDateSoumission().toLocalDate().plusMonths(3));
+
         dto.put("departements", user.getDirections());
         dto.put("email", user.getEmail());
         dto.put("telephone", user.getTelephone());

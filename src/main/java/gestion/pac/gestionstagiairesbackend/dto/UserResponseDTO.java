@@ -11,7 +11,7 @@ public class UserResponseDTO {
     private Long id;
     private String civilite;
     private String nom;
-    private String prenom;w
+    private String prenom;
     private String email;
     private String contactUrgent;
 

@@ -74,7 +74,7 @@ public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
         try {
             // 1. Vérifier si l'utilisateur existe
             User user = userRepository.findByEmail(authDTO.getEmail())
-                    .orElseThrow(() -> new RuntimeException("Aucun compte associé à cet email. Veuillez créer un compte."));
+                    .orElseThrow(() -> new RuntimeException(""));
 
             // 2. Vérifier que c'est bien un stagiaire
             if (!"STAGIAIRE".equals(user.getRole())) {
@@ -85,7 +85,7 @@ public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
             // 3. Vérifier le mot de passe
             if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body("Mauvais identifiant ou mot de passe incorrect");
+                        .body("");
             }
 
             // 4. Générer le token JWT
@@ -120,7 +120,7 @@ public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
 
             // Vérification du mot de passe
             if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Mot de passe incorrect"));
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email ou mot de passe incorrect"));
             }
 
             // Vérification du rôle RH
