@@ -23,6 +23,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // Compter les utilisateurs par statut
     long countByStatut(String statut);
+    long countByStatutIn(List<String> statuts);
 
     // Trouver les utilisateurs par statut
     List<User> findByStatut(String statut);
@@ -43,50 +44,50 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findTop5ByRoleOrderByDateSoumissionDesc(String role);
 
 
-        // Ajoutez ces nouvelles méthodes
-        @Query(value = "SELECT d.nom AS department, d.places_totales AS total, d.places_occupees AS occupied " +
-                "FROM direction d", nativeQuery = true)
-        List<Map<String, Object>> getDepartmentCapacity();
+    // Ajoutez ces nouvelles méthodes
+    @Query(value = "SELECT d.nom AS department, d.places_totales AS total, d.places_occupees AS occupied " +
+            "FROM direction d", nativeQuery = true)
+    List<Map<String, Object>> getDepartmentCapacity();
 
-        @Query(value = "SELECT " +
-                "EXTRACT(QUARTER FROM u.date_soumission) AS quarter, " +
-                "EXTRACT(YEAR FROM u.date_soumission) AS year, " +
-                "COUNT(u.id) AS count " +
-                "FROM users u " +
-                "WHERE u.role = 'STAGIAIRE' " +
-                "GROUP BY year, quarter " +
-                "ORDER BY year, quarter", nativeQuery = true)
-        List<Map<String, Object>> getDemandesByQuarter();
+    @Query(value = "SELECT " +
+            "EXTRACT(QUARTER FROM u.date_soumission) AS quarter, " +
+            "EXTRACT(YEAR FROM u.date_soumission) AS year, " +
+            "COUNT(u.id) AS count " +
+            "FROM users u " +
+            "WHERE u.role = 'STAGIAIRE' " +
+            "GROUP BY year, quarter " +
+            "ORDER BY year, quarter", nativeQuery = true)
+    List<Map<String, Object>> getDemandesByQuarter();
 
-        @Query(value = "SELECT " +
-                "EXTRACT(YEAR FROM u.date_soumission) AS year, " +
-                "COUNT(u.id) AS count " +
-                "FROM users u " +
-                "WHERE u.role = 'STAGIAIRE' " +
-                "GROUP BY year " +
-                "ORDER BY year", nativeQuery = true)
-        List<Map<String, Object>> getDemandesByYear();
+    @Query(value = "SELECT " +
+            "EXTRACT(YEAR FROM u.date_soumission) AS year, " +
+            "COUNT(u.id) AS count " +
+            "FROM users u " +
+            "WHERE u.role = 'STAGIAIRE' " +
+            "GROUP BY year " +
+            "ORDER BY year", nativeQuery = true)
+    List<Map<String, Object>> getDemandesByYear();
 
-        @Query(value = "SELECT * FROM users u " +
-                "WHERE u.role = 'STAGIAIRE' " +
-                "AND EXTRACT(QUARTER FROM u.date_soumission) = :quarter " +
-                "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
-        List<User> findDemandesByQuarterAndYear(@Param("quarter") int quarter, @Param("year") int year);
+    @Query(value = "SELECT * FROM users u " +
+            "WHERE u.role = 'STAGIAIRE' " +
+            "AND EXTRACT(QUARTER FROM u.date_soumission) = :quarter " +
+            "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
+    List<User> findDemandesByQuarterAndYear(@Param("quarter") int quarter, @Param("year") int year);
 
 
 
-        @Query(value = "SELECT * FROM users u " +
-                "WHERE u.statut = 'DOCUMENT_COMPLET' " +
-                "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
-        List<User> findByStatutAndYear(@Param("statut") String statut, @Param("year") int year);
+    @Query(value = "SELECT * FROM users u " +
+            "WHERE u.statut = 'DOCUMENT_COMPLET' " +
+            "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
+    List<User> findByStatutAndYear(@Param("statut") String statut, @Param("year") int year);
 
-        @Query(value = "SELECT * FROM users u " +
-                "WHERE u.statut = 'DOCUMENT_COMPLET' " +
-                "AND EXTRACT(YEAR FROM u.date_soumission) = :year " +
-                "AND EXTRACT(QUARTER FROM u.date_soumission) = :quarter", nativeQuery = true)
-        List<User> findByStatutAndQuarter(@Param("statut") String statut,
-                                          @Param("year") int year,
-                                          @Param("quarter") int quarter);
+    @Query(value = "SELECT * FROM users u " +
+            "WHERE u.statut = 'DOCUMENT_COMPLET' " +
+            "AND EXTRACT(YEAR FROM u.date_soumission) = :year " +
+            "AND EXTRACT(QUARTER FROM u.date_soumission) = :quarter", nativeQuery = true)
+    List<User> findByStatutAndQuarter(@Param("statut") String statut,
+                                      @Param("year") int year,
+                                      @Param("quarter") int quarter);
 
 
     // Ajoutez ces nouvelles requêtes dans UserRepository.java

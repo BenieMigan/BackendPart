@@ -45,14 +45,19 @@ public class User {
     private LocalDate dateDebut; //
     private LocalDate dateFin;
     private String genre; // "F" ou "M"
-    private LocalDateTime dateSoumission;;
+    private LocalDateTime dateSoumission;
+    private String noteServicePath;
+    private String demandeStagePath;
+    @Column(name = "alerte")
+    private String alerte;
+    private boolean ficheAssuranceValidee;
+    private boolean generatedDocsPath;
 
 
     public User() {
     }
 
-
-    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission,String telephone) {
+    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission, String telephone, String noteServicePath, String demandeStagePath, String alerte, boolean ficheAssuranceValidee,boolean generatedDocsPath) {
         this.id = id;
         this.civilite = civilite;
         this.nom = nom;
@@ -78,6 +83,11 @@ public class User {
         this.lastLogin = lastLogin;
         this.dateSoumission = dateSoumission;
         this.telephone = telephone;
+        this.noteServicePath = noteServicePath;
+        this.demandeStagePath = demandeStagePath;
+        this.alerte = alerte;
+        this.ficheAssuranceValidee = ficheAssuranceValidee;
+        this.generatedDocsPath = generatedDocsPath;
 
 
 
@@ -94,6 +104,14 @@ public class User {
 
     public String getCivilite() {
         return civilite;
+    }
+
+    public String getAlerte() {
+        return alerte;
+    }
+
+    public void setAlerte(String alerte) {
+        this.alerte = alerte;
     }
 
     public void setCivilite(String civilite) {
@@ -291,4 +309,38 @@ public class User {
     public void setTelephone(String telephone) {
         this.telephone = telephone;
     }
+
+    public String getNoteServicePath() {
+        return noteServicePath;
+    }
+
+    public void setNoteServicePath(String noteServicePath) {
+        this.noteServicePath = noteServicePath;
+    }
+
+    public String getDemandeStagePath() {
+        return demandeStagePath;
+    }
+
+    public void setDemandeStagePath(String demandeStagePath) {
+        this.demandeStagePath = demandeStagePath;
+    }
+
+
+    public void setFicheAssuranceValidee(boolean ficheAssuranceValidee) {
+        this.ficheAssuranceValidee = ficheAssuranceValidee;
+    }
+
+    public boolean isFicheAssuranceValidee() {
+        return "FICHE_ASSURANCE_VALIDEE".equals(this.statut);
+    }
+
+    public boolean isGeneratedDocsPath() {
+        return generatedDocsPath;
+    }
+
+    public void setGeneratedDocsPath(boolean generatedDocsPath) {
+        this.generatedDocsPath = generatedDocsPath;
+    }
 }
+

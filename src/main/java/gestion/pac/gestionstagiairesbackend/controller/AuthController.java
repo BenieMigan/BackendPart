@@ -4,6 +4,7 @@ import gestion.pac.gestionstagiairesbackend.dto.AuthDTO;
 import gestion.pac.gestionstagiairesbackend.dto.RHUserDTO;
 import gestion.pac.gestionstagiairesbackend.entite.User;
 import gestion.pac.gestionstagiairesbackend.repository.UserRepository;
+import gestion.pac.gestionstagiairesbackend.service.EmailService;
 import gestion.pac.gestionstagiairesbackend.service.JwtTokenService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,90 +25,85 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
 
+    private final EmailService emailService;
+
     public AuthController(UserRepository userRepository,
                           PasswordEncoder passwordEncoder,
-                          JwtTokenService jwtTokenService) {
+                          JwtTokenService jwtTokenService,
+                          EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.emailService = emailService;
     }
-//Inscription Stagiaire
-@PostMapping("/register/stagiaire")
-public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
-    // 1. Vérifications préalables
-    if (userRepository.existsByEmail(authDTO.getEmail())) {
-        return ResponseEntity.badRequest().body("Email déjà utilisé");
-    }
+    //Inscription Stagiaire
+    @PostMapping("/register/stagiaire")
+    public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
+        // 1. Vérifications préalables
+        if (userRepository.existsByEmail(authDTO.getEmail())) {
+            return ResponseEntity.badRequest().body("Email déjà utilisé");
+        }
 
-    if (authDTO.getPassword() == null || authDTO.getConfirmPassword() == null) {
-        return ResponseEntity.badRequest().body("Les champs mot de passe sont obligatoires");
-    }
+        if (authDTO.getPassword() == null || authDTO.getConfirmPassword() == null) {
+            return ResponseEntity.badRequest().body("Les champs mot de passe sont obligatoires");
+        }
 
-    if (!authDTO.getPassword().equals(authDTO.getConfirmPassword())) {
-        return ResponseEntity.badRequest().body("Les mots de passe ne correspondent pas");
-    }
+        if (!authDTO.getPassword().equals(authDTO.getConfirmPassword())) {
+            return ResponseEntity.badRequest().body("Les mots de passe ne correspondent pas");
+        }
 
-    if (authDTO.getPassword().length() < 8) {
-        return ResponseEntity.badRequest().body("Le mot de passe doit contenir au moins 8 caractères");
-    }
+        if (authDTO.getPassword().length() < 8) {
+            return ResponseEntity.badRequest().body("Le mot de passe doit contenir au moins 8 caractères");
+        }
 
-    // 2. Création de l'utilisateur
-    User user = new User();
-    user.setCivilite(authDTO.getCivilite());
-    user.setNom(authDTO.getNom());
-    user.setPrenom(authDTO.getPrenom());
-    user.setEmail(authDTO.getEmail());
-    user.setPassword(passwordEncoder.encode(authDTO.getPassword()));
-    user.setRole("STAGIAIRE");
+        // 2. Création de l'utilisateur
+        User user = new User();
+        user.setCivilite(authDTO.getCivilite());
+        user.setNom(authDTO.getNom());
+        user.setPrenom(authDTO.getPrenom());
+        user.setEmail(authDTO.getEmail());
+        user.setPassword(passwordEncoder.encode(authDTO.getPassword()));
+        user.setRole("STAGIAIRE");
 
-    userRepository.save(user);
+        userRepository.save(user);
 
 // Retournez un objet JSON au lieu d'une simple String
-    Map<String, String> response = new HashMap<>();
-    response.put("message", "Inscription réussie");
-    return ResponseEntity.ok(response);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Inscription réussie");
+        return ResponseEntity.ok(response);
     }
 
     //Connexion Stagiaire
     @PostMapping("/login/stagiaire")
     public ResponseEntity<?> loginStagiaire(@RequestBody AuthDTO authDTO) {
         try {
-            // 1. Vérifier si l'utilisateur existe
             User user = userRepository.findByEmail(authDTO.getEmail())
-                    .orElseThrow(() -> new RuntimeException(""));
+                    .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
 
-            // 2. Vérifier que c'est bien un stagiaire
             if (!"STAGIAIRE".equals(user.getRole())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("Accès réservé aux stagiaires");
+                        .body(Map.of("message", "Accès réservé aux stagiaires"));
             }
 
-            // 3. Vérifier le mot de passe
             if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body("");
+                        .body(Map.of("message", "Email ou mot de passe incorrect"));
             }
 
-            // 4. Générer le token JWT
             String token = jwtTokenService.generateToken(user.getId());
-
-            // 5. Mettre à jour la dernière connexion
             user.setLastLogin(LocalDateTime.now());
             userRepository.save(user);
 
-            // 6. Construire la réponse
-            Map<String, Object> response = new HashMap<>();
-            response.put("token", token);
-            response.put("user", user);
-
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(Map.of(
+                    "token", token,
+                    "user", user
+            ));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(e.getMessage());
+                    .body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Erreur lors de la connexion: " + e.getMessage());
+                    .body(Map.of("message", "Erreur lors de la connexion", "error", e.getMessage()));
         }
     }
 
@@ -153,6 +149,59 @@ public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token invalide");
+        }
+    }
+
+    // Mot de passe oublié - Demande de réinitialisation
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Aucun compte trouvé avec cet email"));
+
+            // Générer un token de réinitialisation (valide 1h)
+            String resetToken = jwtTokenService.generatePasswordResetToken(user.getId());
+
+            // Lien de réinitialisation
+            String resetLink = "http://localhost:3000/reset-password?token=" + resetToken;
+
+            // Envoyer l'email réel
+            emailService.ForgotPassword(user.getEmail(), "Réinitialisation du mot de passe", resetLink);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Si un compte existe avec cet email, un lien a été envoyé"
+                    // Ne pas renvoyer le token ici en production
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Réinitialisation du mot de passe
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        try {
+            String token = request.get("token");
+            String newPassword = request.get("newPassword");
+            String confirmPassword = request.get("confirmPassword");
+
+            if (!newPassword.equals(confirmPassword)) {
+                return ResponseEntity.badRequest().body("Les mots de passe ne correspondent pas");
+            }
+
+            Long userId = jwtTokenService.validatePasswordResetToken(token);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userRepository.save(user);
+
+            return ResponseEntity.ok(Map.of("message", "Mot de passe réinitialisé avec succès"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 

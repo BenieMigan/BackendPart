@@ -11,6 +11,7 @@ import gestion.pac.gestionstagiairesbackend.service.FileStorageService;
 import gestion.pac.gestionstagiairesbackend.service.DocumentGenerationService;
 import gestion.pac.gestionstagiairesbackend.service.JwtTokenService;
 import gestion.pac.gestionstagiairesbackend.service.GoogleCalendarService;
+import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +25,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,8 +38,10 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -103,10 +107,6 @@ public class UserController {
                                     " - Plus de places disponibles"));
                 }
             }
-
-
-
-
 
             // Mise à jour des informations utilisateur
             connectedUser.setCivilite(userDTO.getCivilite());
@@ -176,13 +176,11 @@ public class UserController {
                     new Direction("Direction des Affaires Juridiques et du Contentieux", 6, 0),
                     new Direction("Direction Générale", 6, 0)
 
-                    );
+            );
             directionRepository.saveAll(directions);
         }
 
     }
-
-
     private UserResponseDTO convertToResponseDTO(User user) {
         UserResponseDTO dto = new UserResponseDTO();
         dto.setId(user.getId());
@@ -210,6 +208,291 @@ public class UserController {
         return dto;
     }
 
+    // Modifier l'endpoint d'upload pour ne pas mettre directement DOCUMENT_COMPLET
+    @PutMapping("/{id}/upload-assurance")
+    public ResponseEntity<?> uploadFicheAssurance(
+            @PathVariable Long id,
+            @RequestParam("assurance") MultipartFile file,
+            @RequestHeader("Authorization") String authHeader) {
+
+        try {
+            // Validation du token
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            // Vérifications
+            if (!userId.equals(id)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            if (!"STAGIAIRE".equals(user.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            if (!"VALIDEE".equals(user.getStatut())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Le statut doit être VALIDEE");
+            }
+
+            // Sauvegarde du fichier
+            String ficheAssurancePath = fileStorageService.storeFile(file);
+            user.setFicheAssurancePath(ficheAssurancePath);
+            user.setStatut("EN_ATTENTE_VALIDATION"); // Nouveau statut
+
+            User updatedUser = userRepository.save(user);
+
+
+
+            return ResponseEntity.ok(convertToResponseDTO(updatedUser));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Permet à un stagiaire connecté, avec le statut VALIDEE, d’uploader sa fiche d’assurance pour finaliser sa demande.
+    @PutMapping("/finaliser-demande")
+    public ResponseEntity<?> finaliserDemandeAvecFiche(
+            @RequestParam("assurance") MultipartFile file,
+            @RequestHeader("Authorization") String authHeader) {
+
+        try {
+            // Extraction et validation du token JWT
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Utilisateur non authentifié"));
+            }
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            // Vérifie que l'utilisateur est un stagiaire avec statut VALIDEE
+            if (!"STAGIAIRE".equals(user.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "Accès réservé aux stagiaires"));
+            }
+
+            if (!"VALIDEE".equals(user.getStatut())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "La demande doit être au statut VALIDEE pour finaliser"));
+            }
+
+            // Enregistrer le fichier de fiche d’assurance
+            String assurancePath = fileStorageService.storeFile(file);
+            user.setFicheAssurancePath(assurancePath);
+
+            // Mettre à jour le statut
+            user.setStatut("EN_ATTENTE_VALIDATION");
+
+            userRepository.save(user);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Fiche d’assurance envoyée avec succès. Votre demande est en attente de validation.",
+                    "statut", user.getStatut()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de l’envoi de la fiche : " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/alerte")
+    public ResponseEntity<?> getAlerte(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            return ResponseEntity.ok(Map.of(
+                    "alerte", user.getAlerte(),
+                    "statut", user.getStatut()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de la récupération de l’alerte : " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/documents/{userId}/generate")
+    public ResponseEntity<?> generateDocuments(@PathVariable Long userId) {
+        Optional<User> userOptional = userRepository.findById(userId);
+        if (userOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur introuvable");
+        }
+
+        User user = userOptional.get();
+
+        if (!"FICHE_ASSURANCE_VALIDEE".equals(user.getStatut())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("La fiche d'assurance doit être validée d'abord");
+        }
+
+        try {
+            // Génère les documents et récupère seulement les noms de fichiers
+            String noteDeServicePath = documentGenerationService.generateNoteDeService(user);
+            String demandeStagePath = documentGenerationService.generateDemandeStage(user);
+
+            // Extraire juste le nom du fichier du chemin complet
+            String noteDeServiceFilename = Paths.get(noteDeServicePath).getFileName().toString();
+            String demandeStageFilename = Paths.get(demandeStagePath).getFileName().toString();
+
+            Map<String, String> result = new HashMap<>();
+            result.put("noteDeService", noteDeServiceFilename);
+            result.put("demandeStage", demandeStageFilename);
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de la génération des documents : " + e.getMessage());
+        }
+    }
+    @GetMapping("/documents/download/{filename:.+}")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable String filename,
+            @RequestHeader("Authorization") String authHeader) {
+
+        try {
+            // Vérification du token
+            String token = authHeader.replace("Bearer ", "");
+            jwtTokenService.validateAndGetUserId(token); // Lance une exception si invalide
+
+            // Sécurité : vérification du path traversal
+            if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Chemin base pour les documents générés
+            Path documentsDir = Paths.get("generated-docs").toAbsolutePath().normalize();
+            Path filePath = documentsDir.resolve(filename).normalize();
+
+            // Vérification que le chemin est bien dans le dossier autorisé
+            if (!filePath.startsWith(documentsDir)) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (!resource.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String contentType = Files.probeContentType(filePath);
+            if (contentType == null) {
+                contentType = "application/octet-stream";
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (JwtException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/documents/{userId}/confirm")
+    public ResponseEntity<?> confirmDocumentsDownloaded(
+            @PathVariable Long userId,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            Long currentUserId = jwtTokenService.validateAndGetUserId(token);
+            User user = userRepository.findById(currentUserId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            if (!user.getId().equals(userId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            User stagiaire = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Stagiaire non trouvé"));
+
+            if (!"FICHE_ASSURANCE_VALIDEE".equals(stagiaire.getStatut())) {
+                return ResponseEntity.badRequest().body("Documents non disponibles");
+            }
+
+            // Mettre à jour le statut
+            stagiaire.setStatut("DOCUMENT_COMPLET");
+            userRepository.save(stagiaire);
+
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Documents confirmés téléchargés",
+                    "statut", stagiaire.getStatut()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur: " + e.getMessage());
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//Recupere simplement les infos de tous les utilisateurs connectés quelque soit le role ou le statut
     @GetMapping("/validate-token")
     public ResponseEntity<UserResponseDTO> getUserByToken(@RequestHeader("Authorization") String authHeader) {
         try {
@@ -225,198 +508,6 @@ public class UserController {
             return ResponseEntity.ok(convertToResponseDTO(user));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-    }
-
-    @PutMapping("/{id}/upload-assurance")
-    public ResponseEntity<?> uploadFicheAssurance(
-            @PathVariable Long id,
-            @RequestParam("assurance") MultipartFile file,
-            @RequestParam String token) {
-
-        try {
-            // Validation du token
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            if (userId == null || !userId.equals(id)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-
-            User user = userRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            // Vérification du statut
-            if (!"VALIDEE".equals(user.getStatut())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Cette demande ne peut pas être finalisée"));
-            }
-
-            // Sauvegarde du fichier
-            String ficheAssurancePath = fileStorageService.storeFile(file);
-            user.setFicheAssurancePath(ficheAssurancePath);
-            user.setStatut("DOCUMENT_COMPLET"); // Mise à jour du statut
-
-
-            // Mettre à jour les dates
-            LocalDate now = LocalDate.now();
-            user.setDateDebut(now); // Date de début = date de finalisation
-            user.setDateFin(now.plusMonths(3)); // Date de fin = 3 mois après
-
-
-            // Mise à jour des places occupées dans les directions
-            for (String directionNom : user.getDirections()) {
-                Direction direction = directionRepository.findByNom(directionNom)
-                        .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
-                direction.setPlacesOccupees(direction.getPlacesOccupees() + 1);
-                directionRepository.save(direction);
-            }
-
-            User updatedUser = userRepository.save(user);
-            return ResponseEntity.ok(convertToResponseDTO(updatedUser));
-
-        } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Erreur lors du stockage du fichier"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-    @GetMapping("/validate-finalization-token")
-    public ResponseEntity<?> validateFinalizationToken(@RequestParam String token) {
-        try {
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            if (userId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Token invalide ou expiré"));
-            }
-
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            // Vérifiez que l'utilisateur est bien un stagiaire
-            if (!"STAGIAIRE".equals(user.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Accès réservé aux stagiaires"));
-            }
-
-            // Vérifiez que le statut est VALIDEE
-            if (!"VALIDEE".equals(user.getStatut())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Cette demande ne peut pas être finalisée"));
-            }
-
-            return ResponseEntity.ok(convertToResponseDTO(user));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-    @GetMapping("/{id}/generate-note-service")
-    public ResponseEntity<Resource> generateNoteService(
-            @PathVariable Long id,
-            @RequestParam String token) {
-        try {
-            // Validation
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            if (userId == null || !userId.equals(id)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-
-            User user = userRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-            // Vérification que la fiche d'assurance est uploadée
-            if (user.getFicheAssurancePath() == null || user.getFicheAssurancePath().isEmpty()) {
-                throw new DocumentValidationException("Vous devez d'abord uploader votre fiche d'assurance");
-            }
-
-            // Vérification que le statut est DOCUMENT_COMPLET
-            if (!"DOCUMENT_COMPLET".equals(user.getStatut())) {
-                throw new DocumentValidationException("La demande n'est pas encore complète");
-            }
-
-            // Génération
-            String filePath = documentGenerationService.generateNoteDeService(user);
-            Path path = Paths.get(filePath);
-            Resource resource = new UrlResource(path.toUri());
-
-            if (!resource.exists()) {
-                throw new RuntimeException("Fichier non généré");
-            }
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"note-service.pdf\"")
-                    .contentType(MediaType.APPLICATION_PDF)
-                    .body(resource);
-
-        } catch (DocumentValidationException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    e.getMessage(),
-                    e
-            );
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Échec de génération: " + e.getMessage(),
-                    e
-            );
-        }
-    }
-
-    @GetMapping("/{id}/generate-demande-stage")
-    public ResponseEntity<Resource> generateDemandeStage(
-            @PathVariable Long id,
-            @RequestParam String token) {
-        try {
-            // Validation
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            if (userId == null || !userId.equals(id)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-
-            User user = userRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-            // Vérification que la fiche d'assurance est uploadée
-            if (user.getFicheAssurancePath() == null || user.getFicheAssurancePath().isEmpty()) {
-                throw new DocumentValidationException("Vous devez d'abord uploader votre fiche d'assurance");
-            }
-
-            // Vérification que le statut est DOCUMENT_COMPLET
-            if (!"DOCUMENT_COMPLET".equals(user.getStatut())) {
-                throw new DocumentValidationException("La demande n'est pas encore complète");
-            }
-
-            // Génération
-            String filePath = documentGenerationService.generateDemandeStage(user);
-            Path path = Paths.get(filePath);
-            Resource resource = new UrlResource(path.toUri());
-
-            if (!resource.exists()) {
-                throw new RuntimeException("Fichier non généré");
-            }
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"demande-stage.pdf\"")
-                    .contentType(MediaType.APPLICATION_PDF)
-                    .body(resource);
-
-        } catch (DocumentValidationException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    e.getMessage(),
-                    e
-            );
-        } catch (Exception e) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Échec de génération: " + e.getMessage(),
-                    e
-            );
         }
     }
 }

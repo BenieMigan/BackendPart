@@ -22,7 +22,7 @@ public class GestionstagiairesbackendApplication {
 			if (userRepository.findByEmail("resourcehumaine@pac.bj").isEmpty()) {
 				User rh = new User();
 				rh.setEmail("resourcehumaine@pac.bj");
-				rh.setPassword(encoder.encode("Admin123@azertyuiopppppmlkj@12"));
+				rh.setPassword(encoder.encode("Admin123@rhPassword@12"));
 				rh.setNom("Responsable");
 				rh.setPrenom("RH");
 				rh.setRole("RH");

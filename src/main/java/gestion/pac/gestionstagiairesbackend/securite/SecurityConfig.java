@@ -44,7 +44,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/users/directions").permitAll()
-                        .requestMatchers("/api/users/validate-finalization-token").permitAll() // Ajoutez cette ligne
+                        .requestMatchers("/api/users/documents/download/**").permitAll() // Modifié
+                        .requestMatchers("/api/users/check-finalization-status").permitAll()
                         .requestMatchers("/api/users/*/upload-assurance").authenticated()
                         .requestMatchers("/api/rh/**").hasRole("RH")
                         .anyRequest().authenticated()                )

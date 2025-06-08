@@ -55,4 +55,27 @@ public class JwtTokenService {
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
+
+    public String generatePasswordResetToken(Long userId) {
+        // Token valide 1 heure
+        return Jwts.builder()
+                .setSubject(userId.toString())
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 3600000)) // 1 heure
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public Long validatePasswordResetToken(String token) {
+        try {
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+            return Long.parseLong(claims.getSubject());
+        } catch (Exception e) {
+            throw new RuntimeException("Token invalide ou expiré: " + e.getMessage());
+        }
+    }
 }
