@@ -24,9 +24,26 @@ public class User {
     private LocalDateTime lastLogin;
 
 
-    private String password;
-    private String role = "STAGIAIRE"; // ou "RH"
+    @Column(name = "first_login")
+    private boolean firstLogin = false;
 
+    @Column(name = "reset_password_otp")
+    private String resetPasswordOtp;
+
+    @Column(name = "otp_expiry")
+    private LocalDateTime otpExpiry;
+    private String password;
+    private String role = "STAGIAIRE"; // ou "RH", "SECRETAIRE", "CHEF_SERVICE", "ENCADREUR"
+
+    // Pour les secrétaires et chefs de service
+    private String direction; // La direction à laquelle ils appartiennent
+
+    // Pour les encadreurs
+    private Long chefServiceId; // Référence au chef de service
+
+    // Pour les stagiaires
+    private Long secretaireId; // Référence à la secrétaire
+    private Long encadreurId; // Référence à l'encadreur
     private String contactUrgent;
     private String ficheAssurancePath; // Chemin vers le fichier uploadé
     @ElementCollection
@@ -50,26 +67,88 @@ public class User {
     private String demandeStagePath;
     @Column(name = "alerte")
     private String alerte;
+    private String service;
     private boolean ficheAssuranceValidee;
     private boolean generatedDocsPath;
 
+    // Ajoutez ces champs à la classe User
+    private LocalDate pauseRequestDate;
+    private LocalDate repriseRequestDate;
+
+    // Ajoutez ces getters et setters
+    public LocalDate getPauseRequestDate() {
+        return pauseRequestDate;
+    }
+
+    public void setPauseRequestDate(LocalDate pauseRequestDate) {
+        this.pauseRequestDate = pauseRequestDate;
+    }
+
+    public LocalDate getRepriseRequestDate() {
+        return repriseRequestDate;
+    }
+
+    public void setRepriseRequestDate(LocalDate repriseRequestDate) {
+        this.repriseRequestDate = repriseRequestDate;
+    }
+    // Statuts possibles
+    public enum StageStatus {
+        ACTIVE, // Stage en cours
+        PAUSED, // Stage en pause
+        COMPLETED, // Stage terminé
+        ARCHIVED // Stagiaire archivé
+    }
+
+    // Champs à ajouter
+    private StageStatus stageStatus = StageStatus.ACTIVE;
+    private LocalDate pauseStartDate;
+    private LocalDate pauseEndDate;
+    private LocalDate originalEndDate; // Pour stocker la date de fin originale
+    private Integer remainingDaysBeforePause; // Jours restants avant la pause
+
+    public StageStatus getStageStatus() {
+        return stageStatus;
+    }
+
+    public void setStageStatus(StageStatus stageStatus) {
+        this.stageStatus = stageStatus;
+    }
+
+    public LocalDate getPauseStartDate() {
+        return pauseStartDate;
+    }
+
+    public void setPauseStartDate(LocalDate pauseStartDate) {
+        this.pauseStartDate = pauseStartDate;
+    }
+
+    public LocalDate getPauseEndDate() {
+        return pauseEndDate;
+    }
+
+    public void setPauseEndDate(LocalDate pauseEndDate) {
+        this.pauseEndDate = pauseEndDate;
+    }
+
+    public LocalDate getOriginalEndDate() {
+        return originalEndDate;
+    }
+
+    public void setOriginalEndDate(LocalDate originalEndDate) {
+        this.originalEndDate = originalEndDate;
+    }
+
+    public Integer getRemainingDaysBeforePause() {
+        return remainingDaysBeforePause;
+    }
+
+    public void setRemainingDaysBeforePause(Integer remainingDaysBeforePause) {
+        this.remainingDaysBeforePause = remainingDaysBeforePause;
+    }
 
     public User() {
     }
-
-    public User(Long id, String civilite, String nom, String prenom, String email, String password, String role, String contactUrgent, List<String> directions, String cvPath, String lettrePath, Boolean consentement, String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String ficheAssurancePath, LocalDateTime lastLogin, LocalDateTime dateSoumission, String telephone, String noteServicePath, String demandeStagePath, String alerte, boolean ficheAssuranceValidee,boolean generatedDocsPath) {
-        this.id = id;
-        this.civilite = civilite;
-        this.nom = nom;
-        this.prenom = prenom;
-        this.email = email;
-        this.password = password;
-        this.role = role;
-        this.contactUrgent = contactUrgent;
-        this.directions = directions;
-        this.cvPath = cvPath;
-        this.lettrePath = lettrePath;
-        this.consentement = consentement;
+  public User(String typeStage, String nomEtablissement, String adresseEtablissement, String message, String statut, String filiere, String anneeAcademique, LocalDate dateDebut, LocalDate dateFin, String genre, LocalDateTime dateSoumission, String noteServicePath, String demandeStagePath, String alerte, boolean ficheAssuranceValidee, boolean generatedDocsPath, Long id, String civilite, String nom, String prenom, String telephone, String email, LocalDateTime lastLogin, String password, String role, String direction, Long chefServiceId, Long secretaireId, Long encadreurId, String contactUrgent, String ficheAssurancePath, List<String> directions, String cvPath, String lettrePath, Boolean consentement,String service) {
         this.typeStage = typeStage;
         this.nomEtablissement = nomEtablissement;
         this.adresseEtablissement = adresseEtablissement;
@@ -79,23 +158,79 @@ public class User {
         this.anneeAcademique = anneeAcademique;
         this.dateDebut = dateDebut;
         this.dateFin = dateFin;
-        this.ficheAssurancePath = ficheAssurancePath;
-        this.lastLogin = lastLogin;
+        this.genre = genre;
         this.dateSoumission = dateSoumission;
-        this.telephone = telephone;
         this.noteServicePath = noteServicePath;
         this.demandeStagePath = demandeStagePath;
         this.alerte = alerte;
         this.ficheAssuranceValidee = ficheAssuranceValidee;
         this.generatedDocsPath = generatedDocsPath;
-
-
-
+        this.id = id;
+        this.civilite = civilite;
+        this.nom = nom;
+        this.prenom = prenom;
+        this.telephone = telephone;
+        this.email = email;
+        this.lastLogin = lastLogin;
+        this.password = password;
+        this.role = role;
+        this.direction = direction;
+        this.chefServiceId = chefServiceId;
+        this.secretaireId = secretaireId;
+        this.encadreurId = encadreurId;
+        this.contactUrgent = contactUrgent;
+        this.ficheAssurancePath = ficheAssurancePath;
+        this.directions = directions;
+        this.cvPath = cvPath;
+        this.lettrePath = lettrePath;
+        this.consentement = consentement;
+        this.service = service;
 
     }
 
+
     public Long getId() {
         return id;
+    }
+
+    public String getDirection() {
+        return direction;
+    }
+
+    public String getService() {
+        return service;
+    }
+
+    public void setService(String service) {
+        this.service = service;
+    }
+
+    public void setDirection(String direction) {
+        this.direction = direction;
+    }
+
+    public Long getChefServiceId() {
+        return chefServiceId;
+    }
+
+    public void setChefServiceId(Long chefServiceId) {
+        this.chefServiceId = chefServiceId;
+    }
+
+    public Long getSecretaireId() {
+        return secretaireId;
+    }
+
+    public void setSecretaireId(Long secretaireId) {
+        this.secretaireId = secretaireId;
+    }
+
+    public Long getEncadreurId() {
+        return encadreurId;
+    }
+
+    public void setEncadreurId(Long encadreurId) {
+        this.encadreurId = encadreurId;
     }
 
     public void setId(Long id) {
@@ -218,8 +353,34 @@ public class User {
         return adresseEtablissement;
     }
 
+    public boolean isFirstLogin() {
+        return firstLogin;
+    }
+
+    public void setFirstLogin(boolean firstLogin) {
+        this.firstLogin = firstLogin;
+    }
+
+    public String getResetPasswordOtp() {
+        return resetPasswordOtp;
+    }
+
+    public void setResetPasswordOtp(String resetPasswordOtp) {
+        this.resetPasswordOtp = resetPasswordOtp;
+    }
+
+    public LocalDateTime getOtpExpiry() {
+        return otpExpiry;
+    }
+
+    public void setOtpExpiry(LocalDateTime otpExpiry) {
+        this.otpExpiry = otpExpiry;
+    }
+
     public void setAdresseEtablissement(String adresseEtablissement) {
         this.adresseEtablissement = adresseEtablissement;
+
+
     }
 
     public String getMessage() {

@@ -19,9 +19,9 @@ public class GestionstagiairesbackendApplication {
 	@Bean
 	public CommandLineRunner initRH(UserRepository userRepository, PasswordEncoder encoder) {
 		return args -> {
-			if (userRepository.findByEmail("resourcehumaine@pac.bj").isEmpty()) {
+			if (userRepository.findByEmail("honfodavid29@gmail.com").isEmpty()) {
 				User rh = new User();
-				rh.setEmail("resourcehumaine@pac.bj");
+				rh.setEmail("honfodavid29@gmail.com");
 				rh.setPassword(encoder.encode("Admin123@rhPassword@12"));
 				rh.setNom("Responsable");
 				rh.setPrenom("RH");

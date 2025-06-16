@@ -15,6 +15,33 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);                 // <- manquante
     Optional<User> findByEmail(String email);// <- manquante
 
+    boolean existsByRoleAndDirection(String role, String direction);
+
+    boolean existsByRoleAndDirectionAndService(String role, String direction, String service);
+
+    boolean existsByRoleAndServiceAndDirectionNot(String role, String service, String direction);
+
+    List<User> findByRoleAndChefServiceId(String role, Long chefServiceId);
+
+    @Query("SELECT DISTINCT u FROM User u WHERE u.role = 'CHEF_SERVICE' " +
+            "AND u.direction = :direction " +
+            "AND EXISTS (SELECT 1 FROM User s WHERE s.role = 'STAGIAIRE' AND s.chefServiceId = u.id)")
+    List<User> findChefsServiceWithStagiaires(@Param("direction") String direction);
+
+
+    // Nouvelle méthode pour trouver par service
+    List<User> findByService(String service);
+    // Trouver les utilisateurs par rôle et statut
+    List<User> findByRoleAndStatut(String role, String statut);
+
+    List<User> findByRoleAndEncadreurId(String role, Long encadreurId);
+
+
+    // Trouver les secrétaires par direction
+    List<User> findByRoleAndDirection(String role, String direction);
+
+    // Trouver les stagiaires affectés à une secrétaire
+    List<User> findByRoleAndSecretaireId(String role, Long secretaireId);
 
     List<User> findByRole(String role);
 
@@ -31,6 +58,54 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Trouver les utilisateurs avec fin de stage proche et statut spécifique
     List<User> findByDateFinBetweenAndStatut(LocalDate start, LocalDate end, String statut);
 
+    // Pour les demandes de pause/reprise
+    List<User> findByPauseRequestDateIsNotNull();
+    List<User> findByRepriseRequestDateIsNotNull();
+
+    // Pour compter par statut de stage
+    long countByStageStatus(User.StageStatus status);
+
+    // Pour compter les demandes de pause/reprise
+    long countByPauseRequestDateIsNotNull();
+    long countByRepriseRequestDateIsNotNull();
+
+    // Pour les alertes
+    List<User> findByDateFinBetweenAndStageStatus(LocalDate start, LocalDate end, User.StageStatus status);
+    List<User> findByDateFinAndStageStatus(LocalDate date, User.StageStatus status);
+    @Query("SELECT DISTINCT e FROM User e WHERE e.role = 'ENCADREUR' " +
+            "AND e.chefServiceId = :chefServiceId " +
+            "AND EXISTS (SELECT 1 FROM User s WHERE s.role = 'STAGIAIRE' AND s.encadreurId = e.id)")
+    List<User> findEncadreursWithStagiaires(@Param("chefServiceId") Long chefServiceId);
+
+    @Query("SELECT DISTINCT s FROM User s WHERE s.role = 'SECRETAIRE' AND EXISTS " +
+            "(SELECT st FROM User st WHERE st.secretaireId = s.id AND st.role = 'STAGIAIRE')")
+    List<User> findSecretairesWithStagiaires();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // Statistiques par département (requête native)
     @Query(value = "SELECT d.nom AS department, COUNT(DISTINCT u.id) AS count " +
             "FROM users u " +
@@ -42,7 +117,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // Derniers stagiaires ajoutés
     List<User> findTop5ByRoleOrderByDateSoumissionDesc(String role);
-
 
     // Ajoutez ces nouvelles méthodes
     @Query(value = "SELECT d.nom AS department, d.places_totales AS total, d.places_occupees AS occupied " +
@@ -74,8 +148,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
     List<User> findDemandesByQuarterAndYear(@Param("quarter") int quarter, @Param("year") int year);
 
-
-
     @Query(value = "SELECT * FROM users u " +
             "WHERE u.statut = 'DOCUMENT_COMPLET' " +
             "AND EXTRACT(YEAR FROM u.date_soumission) = :year", nativeQuery = true)
@@ -89,9 +161,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                                       @Param("year") int year,
                                       @Param("quarter") int quarter);
 
-
     // Ajoutez ces nouvelles requêtes dans UserRepository.java
-
     @Query(value = "SELECT " +
             "EXTRACT(YEAR FROM u.date_soumission) AS year, " +
             "COUNT(u.id) AS count " +

@@ -3,6 +3,7 @@ package gestion.pac.gestionstagiairesbackend.controller;
 import gestion.pac.gestionstagiairesbackend.dto.AuthDTO;
 import gestion.pac.gestionstagiairesbackend.dto.DemandeStageDTO;
 import gestion.pac.gestionstagiairesbackend.dto.RHUserDTO;
+import gestion.pac.gestionstagiairesbackend.dto.ValidationFicheDTO;
 import gestion.pac.gestionstagiairesbackend.entite.Direction;
 import gestion.pac.gestionstagiairesbackend.entite.User;
 import gestion.pac.gestionstagiairesbackend.repository.DirectionRepository;
@@ -32,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.io.IOException;
@@ -141,15 +143,7 @@ public class RHController {
             User demande = userRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Demande non trouvée"));
 
-            // Libérer les places si la demande était finalisée
-            if ("DOCUMENT_COMPLET".equals(demande.getStatut())) {
-                for (String directionNom : demande.getDirections()) {
-                    Direction direction = directionRepository.findByNom(directionNom)
-                            .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
-                    direction.setPlacesOccupees(direction.getPlacesOccupees() - 1);
-                    directionRepository.save(direction);
-                }
-            }
+
 
             userRepository.delete(demande);
 
@@ -200,11 +194,6 @@ public class RHController {
                     Direction direction = directionRepository.findByNom(directionNom)
                             .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
 
-                    if (direction.getPlacesOccupees() >= direction.getPlacesTotales()) {
-                        return ResponseEntity.badRequest()
-                                .body(Map.of("error", "Le nombre de place de la direction \"" + directionNom +
-                                        "\" est remplie. Vous ne pouvez pas accepter cette demande"));
-                    }
                 }
             }
 
@@ -359,6 +348,7 @@ public class RHController {
     @PutMapping("/valider-fiche-assurance/{stagiaireId}")
     public ResponseEntity<?> validerFicheAssurance(
             @PathVariable Long stagiaireId,
+            @RequestBody ValidationFicheDTO validationDTO,
             @RequestHeader("Authorization") String authHeader) {
         try {
             // Vérification auth
@@ -378,20 +368,61 @@ public class RHController {
                 return ResponseEntity.badRequest().body("La fiche d'assurance n'est pas en attente de validation");
             }
 
+            // Validation des dates
+            if (validationDTO.isConfirmerPeriodeStagiaire()) {
+                // On utilise les dates du stagiaire
+                if (stagiaire.getDateDebut() == null || stagiaire.getDateFin() == null) {
+                    return ResponseEntity.badRequest().body("Le stagiaire n'a pas défini de période de stage");
+                }
+
+                // Vérification que les dates du stagiaire sont valides
+                if (stagiaire.getDateDebut().isBefore(LocalDate.now())) {
+                    return ResponseEntity.badRequest().body("La date de début du stagiaire est dans le passé");
+                }
+                if (stagiaire.getDateFin().isBefore(stagiaire.getDateDebut())) {
+                    return ResponseEntity.badRequest().body("La date de fin du stagiaire est avant la date de début");
+                }
+            } else {
+                // On utilise les dates fournies par la RH
+                if (validationDTO.getDateDebut() == null || validationDTO.getDateFin() == null) {
+                    return ResponseEntity.badRequest().body("Vous devez définir une période de stage");
+                }
+
+                // Vérification des dates fournies par la RH
+                if (validationDTO.getDateDebut().isBefore(LocalDate.now())) {
+                    return ResponseEntity.badRequest().body("La date de début ne peut pas être dans le passé");
+                }
+                if (validationDTO.getDateFin().isBefore(validationDTO.getDateDebut())) {
+                    return ResponseEntity.badRequest().body("La date de fin doit être après la date de début");
+                }
+
+                // Mise à jour des dates avec celles de la RH
+                stagiaire.setDateDebut(validationDTO.getDateDebut());
+                stagiaire.setDateFin(validationDTO.getDateFin());
+            }
+
             // Mettre à jour le statut
-            stagiaire.setStatut("FICHE_ASSURANCE_VALIDEE");
-            stagiaire.setAlerte("Votre assurance est validée. Veuillez télécharger les documents pour commencer votre stage.");
+            stagiaire.setStatut("FINALISE");
+            stagiaire.setAlerte("Votre assurance est validée. Vous pouvez maintenant télécharger les documents pour commencer votre stage du " +
+                    stagiaire.getDateDebut().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + " au " +
+                    stagiaire.getDateFin().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+
+            // Sauvegarde
             userRepository.save(stagiaire);
 
-            // Envoyer l'email de notification
+            // Envoi d'email
             emailService.sendAssuranceValidationEmail(
                     stagiaire.getEmail(),
-                    "Votre fiche d'assurance a été validée"
+                    "Votre fiche d'assurance a été validée - Documents disponibles",
+                    stagiaire.getDateDebut(),
+                    stagiaire.getDateFin()
             );
 
             return ResponseEntity.ok(Map.of(
-                    "message", "Fiche d'assurance validée avec succès",
-                    "statut", stagiaire.getStatut()
+                    "message", "Fiche d'assurance validée et demande finalisée avec succès",
+                    "statut", stagiaire.getStatut(),
+                    "dateDebut", stagiaire.getDateDebut(),
+                    "dateFin", stagiaire.getDateFin()
             ));
 
         } catch (Exception e) {
@@ -399,7 +430,6 @@ public class RHController {
                     .body("Erreur lors de la validation: " + e.getMessage());
         }
     }
-
     @DeleteMapping("/rejeter-demande-assurance/{stagiaireId}")
     public ResponseEntity<?> rejeterEtSupprimerDemandeAssurance(
             @PathVariable Long stagiaireId,
@@ -441,47 +471,11 @@ public class RHController {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    @GetMapping("/dashboard/stats")
-    public ResponseEntity<?> getDashboardStats(@RequestHeader("Authorization") String authHeader) {
+    // Valider une pause
+    @PutMapping("/valider-pause/{stagiaireId}")
+    public ResponseEntity<?> validerPause(
+            @PathVariable Long stagiaireId,
+            @RequestHeader("Authorization") String authHeader) {
         try {
             // Vérification auth
             String token = authHeader.replace("Bearer ", "");
@@ -493,78 +487,35 @@ public class RHController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
             }
 
-            // Statistiques globales
-            long totalDemandes = userRepository.countByRole("STAGIAIRE");
+            User stagiaire = userRepository.findById(stagiaireId)
+                    .orElseThrow(() -> new RuntimeException("Stagiaire non trouvé"));
 
-            // Modification ici : Compter les demandes avec statut VALIDEE ou DOCUMENT_COMPLET
-            long demandesValidees = userRepository.countByStatutIn(Arrays.asList("VALIDEE", "DOCUMENT_COMPLET"));
+            if (stagiaire.getPauseStartDate() == null) {
+                return ResponseEntity.badRequest().body("Aucune demande de pause en attente");
+            }
 
-            long dossiersFinalises = userRepository.countByStatut("DOCUMENT_COMPLET");
+            // Mise à jour du statut
+            stagiaire.setStageStatus(User.StageStatus.PAUSED);
+            stagiaire.setDateFin(stagiaire.getOriginalEndDate()); // Conserve la date originale
+            stagiaire.setPauseRequestDate(null);
 
-            // Stagiaires avec dossiers finalisés
-            List<User> stagiairesFinalises = userRepository.findByStatut("DOCUMENT_COMPLET");
+            userRepository.save(stagiaire);
 
-            // Statistiques par département
-            List<Map<String, Object>> statsParDepartement = userRepository.getStatsByDepartment();
-
-            // Notifications pour fins de stage proches (dans les 15 jours)
-            LocalDate now = LocalDate.now();
-            List<User> finsProches = userRepository.findByDateFinBetweenAndStatut(
-                    now,
-                    now.plusDays(15),
-                    "DOCUMENT_COMPLET"
-            );
-
-            // Construction de la réponse
-            Map<String, Object> response = new HashMap<>();
-            response.put("totalDemandes", totalDemandes);
-            response.put("demandesValidees", demandesValidees);
-            response.put("dossiersFinalises", dossiersFinalises);
-            response.put("stagiairesFinalises", stagiairesFinalises.stream()
-                    .map(this::convertToDashboardDTO)
-                    .collect(Collectors.toList()));
-            response.put("statsParDepartement", statsParDepartement);
-            response.put("finsProches", finsProches.stream()
-                    .map(this::convertToNotificationDTO)
-                    .collect(Collectors.toList()));
-
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(Map.of(
+                    "message", "Pause validée avec succès",
+                    "newStatus", "PAUSED"
+            ));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
+                    .body("Erreur: " + e.getMessage());
         }
     }
 
-    private Map<String, Object> convertToDashboardDTO(User user) {
-        Map<String, Object> dto = new HashMap<>();
-        dto.put("id", user.getId());
-        dto.put("nomComplet", user.getPrenom() + " " + user.getNom());
-
-        // Utiliser la date de soumission comme date de début
-        dto.put("dateDebut", user.getDateSoumission().toLocalDate()); // Convertir LocalDateTime en LocalDate
-
-        // Calculer la date de fin (3 mois après la date de début)
-        dto.put("dateFin", user.getDateSoumission().toLocalDate().plusMonths(3));
-
-        dto.put("departements", user.getDirections());
-        dto.put("email", user.getEmail());
-        dto.put("telephone", user.getTelephone());
-        return dto;
-    }
-
-    private Map<String, Object> convertToNotificationDTO(User user) {
-        Map<String, Object> dto = new HashMap<>();
-        dto.put("nomComplet", user.getPrenom() + " " + user.getNom());
-        dto.put("dateFin", user.getDateFin());
-        dto.put("joursRestants", ChronoUnit.DAYS.between(LocalDate.now(), user.getDateFin()));
-        dto.put("departementPrincipal", user.getDirections().isEmpty() ? "" : user.getDirections().get(0));
-        return dto;
-    }
-
-    // Ajoutez ces nouveaux endpoints
-    @GetMapping("/dashboard/capacity")
-    public ResponseEntity<?> getDepartmentCapacity(@RequestHeader("Authorization") String authHeader) {
+    // Valider une reprise
+    @PutMapping("/valider-reprise/{stagiaireId}")
+    public ResponseEntity<?> validerReprise(
+            @PathVariable Long stagiaireId,
+            @RequestHeader("Authorization") String authHeader) {
         try {
             // Vérification auth
             String token = authHeader.replace("Bearer ", "");
@@ -576,28 +527,121 @@ public class RHController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
             }
 
-            List<Map<String, Object>> capacityData = userRepository.getDepartmentCapacity();
+            User stagiaire = userRepository.findById(stagiaireId)
+                    .orElseThrow(() -> new RuntimeException("Stagiaire non trouvé"));
 
-            // Créer une nouvelle liste avec des nouvelles Maps modifiables
+            if (stagiaire.getPauseEndDate() == null) {
+                return ResponseEntity.badRequest().body("Aucune demande de reprise en attente");
+            }
+
+            // Calcul de la nouvelle date de fin
+            LocalDate newEndDate = stagiaire.getOriginalEndDate()
+                    .plusDays(stagiaire.getRemainingDaysBeforePause());
+
+            // Mise à jour du statut et des dates
+            stagiaire.setStageStatus(User.StageStatus.ACTIVE);
+            stagiaire.setDateFin(newEndDate);
+            stagiaire.setPauseEndDate(null);
+            stagiaire.setRepriseRequestDate(null);
+
+            userRepository.save(stagiaire);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Reprise validée avec succès",
+                    "newStatus", "ACTIVE",
+                    "newEndDate", newEndDate
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur: " + e.getMessage());
+        }
+    }
+
+    // Archiver un stagiaire
+    @PutMapping("/archiver/{stagiaireId}")
+    public ResponseEntity<?> archiverStagiaire(
+            @PathVariable Long stagiaireId,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Vérification auth
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User rhUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            if (!"RH".equals(rhUser.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
+            }
+
+            User stagiaire = userRepository.findById(stagiaireId)
+                    .orElseThrow(() -> new RuntimeException("Stagiaire non trouvé"));
+
+            if (stagiaire.getStageStatus() != User.StageStatus.COMPLETED) {
+                return ResponseEntity.badRequest().body("Seuls les stagiaires terminés peuvent être archivés");
+            }
+
+            stagiaire.setStageStatus(User.StageStatus.ARCHIVED);
+            userRepository.save(stagiaire);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Stagiaire archivé avec succès",
+                    "newStatus", "ARCHIVED"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur: " + e.getMessage());
+        }
+    }
+
+    // Récupérer les demandes de pause/reprise
+    @GetMapping("/demandes-pause-reprise")
+    public ResponseEntity<?> getDemandesPauseReprise(
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Vérification auth
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User rhUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            if (!"RH".equals(rhUser.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
+            }
+
+            // Récupère les stagiaires avec des demandes en attente
+            List<User> demandesPause = userRepository.findByPauseRequestDateIsNotNull();
+            List<User> demandesReprise = userRepository.findByRepriseRequestDateIsNotNull();
+
+            // Combine les résultats
             List<Map<String, Object>> result = new ArrayList<>();
 
-            for (Map<String, Object> dept : capacityData) {
-                // Créer une nouvelle HashMap à partir des données de la requête
-                Map<String, Object> newDept = new HashMap<>(dept);
-                int total = ((Number) newDept.get("total")).intValue();
-                int occupied = ((Number) newDept.get("occupied")).intValue();
-                newDept.put("remaining", total - occupied);
-                result.add(newDept);
-            }
+            demandesPause.forEach(s -> result.add(Map.of(
+                    "type", "PAUSE",
+                    "stagiaireId", s.getId(),
+                    "nom", s.getNom(),
+                    "prenom", s.getPrenom(),
+                    "dateDebut", s.getPauseStartDate(),
+                    "dateDemande", s.getPauseRequestDate()
+            )));
+
+            demandesReprise.forEach(s -> result.add(Map.of(
+                    "type", "REPRISE",
+                    "stagiaireId", s.getId(),
+                    "nom", s.getNom(),
+                    "prenom", s.getPrenom(),
+                    "dateReprise", s.getPauseEndDate(),
+                    "dateDemande", s.getRepriseRequestDate()
+            )));
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
+                    .body("Erreur: " + e.getMessage());
         }
     }
-    @GetMapping("/dashboard/quarter-stats")
-    public ResponseEntity<?> getQuarterStats(@RequestHeader("Authorization") String authHeader) {
+
+    @GetMapping("/dashboard")
+    public ResponseEntity<?> getDashboardData(@RequestHeader("Authorization") String authHeader) {
         try {
             // Vérification auth
             String token = authHeader.replace("Bearer ", "");
@@ -609,204 +653,43 @@ public class RHController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
             }
 
-            List<Map<String, Object>> quarterStats = userRepository.getDemandesByQuarter();
-            return ResponseEntity.ok(quarterStats);
+            // Statistiques
+            long active = userRepository.countByStageStatus(User.StageStatus.ACTIVE);
+            long paused = userRepository.countByStageStatus(User.StageStatus.PAUSED);
+            long completed = userRepository.countByStageStatus(User.StageStatus.COMPLETED);
+            long archived = userRepository.countByStageStatus(User.StageStatus.ARCHIVED);
+
+            // Demandes en attente
+            long pauseRequests = userRepository.countByPauseRequestDateIsNotNull();
+            long repriseRequests = userRepository.countByRepriseRequestDateIsNotNull();
+
+            // Stagiaires dont le stage se termine bientôt (dans les 7 jours)
+            LocalDate today = LocalDate.now();
+            List<User> endingSoon = userRepository.findByDateFinBetweenAndStageStatus(
+                    today, today.plusDays(7), User.StageStatus.ACTIVE);
+
+            return ResponseEntity.ok(Map.of(
+                    "stats", Map.of(
+                            "active", active,
+                            "paused", paused,
+                            "completed", completed,
+                            "archived", archived
+                    ),
+                    "demandes", Map.of(
+                            "pause", pauseRequests,
+                            "reprise", repriseRequests
+                    ),
+                    "endingSoon", endingSoon.stream().map(s -> Map.of(
+                            "id", s.getId(),
+                            "nom", s.getNom(),
+                            "prenom", s.getPrenom(),
+                            "dateFin", s.getDateFin(),
+                            "joursRestants", ChronoUnit.DAYS.between(today, s.getDateFin())
+                    )).collect(Collectors.toList())
+            ));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
+                    .body("Erreur: " + e.getMessage());
         }
     }
-
-    @GetMapping("/dashboard/year-stats")
-    public ResponseEntity<?> getYearStats(@RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            List<Map<String, Object>> yearStats = userRepository.getDemandesByYear();
-            return ResponseEntity.ok(yearStats);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/dashboard/demandes-by-period")
-    public ResponseEntity<?> getDemandesByPeriod(
-            @RequestParam int quarter,
-            @RequestParam int year,
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            List<User> demandes = userRepository.findDemandesByQuarterAndYear(quarter, year);
-            List<DemandeStageDTO> demandesDTO = demandes.stream()
-                    .map(this::convertToDTO)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(demandesDTO);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    // Ajoutez ces endpoints dans RHController.java
-
-    @GetMapping("/stagiaires-finalises/{year}")
-    public ResponseEntity<?> getStagiairesFinalisesByYear(
-            @PathVariable int year,
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            List<User> stagiaires = userRepository.findByStatutAndYear("DOCUMENT_COMPLET", year);
-            List<DemandeStageDTO> dtos = stagiaires.stream()
-                    .map(this::convertToDTO)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(dtos);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/stagiaires-finalises/{year}/{quarter}")
-    public ResponseEntity<?> getStagiairesFinalisesByQuarter(
-            @PathVariable int year,
-            @PathVariable int quarter,
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            List<User> stagiaires = userRepository.findByStatutAndQuarter("DOCUMENT_COMPLET", year, quarter);
-            List<DemandeStageDTO> dtos = stagiaires.stream()
-                    .map(this::convertToDTO)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(dtos);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-
-    // Ajoutez ces nouvelles méthodes dans RHController.java
-
-    @GetMapping("/dashboard/completed-by-year")
-    public ResponseEntity<?> getCompletedByYear(@RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            // Requête pour les stagiaires complétés par année
-            List<Map<String, Object>> stats = userRepository.getCompletedByYear();
-            return ResponseEntity.ok(stats);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/dashboard/completed-by-quarter")
-    public ResponseEntity<?> getCompletedByQuarter(@RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            // Requête pour les stagiaires complétés par trimestre
-            List<Map<String, Object>> stats = userRepository.getCompletedByQuarter();
-            return ResponseEntity.ok(stats);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @DeleteMapping("/stagiaires-finalises/{id}")
-    public ResponseEntity<?> deleteStagiaire(
-            @PathVariable Long id,
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            // Vérification auth
-            String token = authHeader.replace("Bearer ", "");
-            Long userId = jwtTokenService.validateAndGetUserId(token);
-            User rhUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-            if (!"RH".equals(rhUser.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
-            }
-
-            User stagiaire = userRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Stagiaire non trouvé"));
-
-            if (!"DOCUMENT_COMPLET".equals(stagiaire.getStatut())) {
-                return ResponseEntity.badRequest().body("Seuls les stagiaires avec dossier complet peuvent être supprimés");
-            }
-
-            // Libérer les places dans les directions
-            for (String directionNom : stagiaire.getDirections()) {
-                Direction direction = directionRepository.findByNom(directionNom)
-                        .orElseThrow(() -> new RuntimeException("Direction non trouvée"));
-                direction.setPlacesOccupees(direction.getPlacesOccupees() - 1);
-                directionRepository.save(direction);
-            }
-
-            userRepository.delete(stagiaire);
-
-            return ResponseEntity.ok(Map.of("message", "Stagiaire supprimé avec succès"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
 }

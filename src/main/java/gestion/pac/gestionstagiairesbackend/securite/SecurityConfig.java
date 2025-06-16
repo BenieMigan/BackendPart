@@ -45,10 +45,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/users/directions").permitAll()
                         .requestMatchers("/api/users/documents/download/**").permitAll() // Modifié
-                        .requestMatchers("/api/users/check-finalization-status").permitAll()
                         .requestMatchers("/api/users/*/upload-assurance").authenticated()
+                        .requestMatchers("/api/auth/login/**").permitAll()
                         .requestMatchers("/api/rh/**").hasRole("RH")
-                        .anyRequest().authenticated()                )
+                        .anyRequest().authenticated())
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);
 

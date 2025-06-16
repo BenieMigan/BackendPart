@@ -12,22 +12,12 @@ public class Direction {
     private Long id;
 
     private String nom;
-    private int placesTotales;
-    private int placesOccupees;
 
     public Direction() {
     }
 
-    public Direction(Long id, String nom, int placesTotales, int placesOccupees) {
-        this.id = id;
+    public Direction(String nom) {
         this.nom = nom;
-        this.placesTotales = placesTotales;
-        this.placesOccupees = placesOccupees;
-    }
-    public Direction(String nom, int placesTotales, int placesOccupees) {
-        this.nom = nom;
-        this.placesTotales = placesTotales;
-        this.placesOccupees = placesOccupees;
     }
 
     public Long getId() {
@@ -44,21 +34,5 @@ public class Direction {
 
     public void setNom(String nom) {
         this.nom = nom;
-    }
-
-    public int getPlacesTotales() {
-        return placesTotales;
-    }
-
-    public void setPlacesTotales(int placesTotales) {
-        this.placesTotales = placesTotales;
-    }
-
-    public int getPlacesOccupees() {
-        return placesOccupees;
-    }
-
-    public void setPlacesOccupees(int placesOccupees) {
-        this.placesOccupees = placesOccupees;
     }
 }

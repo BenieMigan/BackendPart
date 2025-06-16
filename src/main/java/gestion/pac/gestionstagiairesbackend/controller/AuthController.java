@@ -1,7 +1,6 @@
 package gestion.pac.gestionstagiairesbackend.controller;
 
-import gestion.pac.gestionstagiairesbackend.dto.AuthDTO;
-import gestion.pac.gestionstagiairesbackend.dto.RHUserDTO;
+import gestion.pac.gestionstagiairesbackend.dto.*;
 import gestion.pac.gestionstagiairesbackend.entite.User;
 import gestion.pac.gestionstagiairesbackend.repository.UserRepository;
 import gestion.pac.gestionstagiairesbackend.service.EmailService;
@@ -15,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -36,6 +36,138 @@ public class AuthController {
         this.jwtTokenService = jwtTokenService;
         this.emailService = emailService;
     }
+
+    // Endpoint pour demander une réinitialisation de mot de passe
+    @PostMapping("/rh/request-password-reset")
+    public ResponseEntity<?> requestPasswordReset(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+
+            // Vérifier que c'est bien l'email RH
+            if (!"honfodavid29@gmail.com".equals(email)) {
+                return ResponseEntity.badRequest().body("Cette fonctionnalité est réservée aux RH");
+            }
+
+            User rhUser = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Compte RH non trouvé"));
+
+            // Générer un code OTP
+            String otp = generateOTP();
+            rhUser.setResetPasswordOtp(otp); // Ajoutez ce champ dans votre entité User
+            rhUser.setOtpExpiry(LocalDateTime.now().plusMinutes(15)); // Ajoutez ce champ
+            userRepository.save(rhUser);
+
+            // Envoyer l'email avec le code OTP
+            emailService.sendOTPEmail(rhUser.getEmail(), "Réinitialisation de mot de passe", otp);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Un code OTP a été envoyé à votre adresse email"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la demande de réinitialisation", "error", e.getMessage()));
+        }
+    }
+
+    // Endpoint pour vérifier l'OTP et réinitialiser le mot de passe
+    @PostMapping("/rh/reset-password")
+    public ResponseEntity<?> resetPasswordRH(@RequestBody ResetPasswordDTO resetPasswordDTO) {
+        try {
+            User rhUser = userRepository.findByEmail("honfodavid29@gmail.com")
+                    .orElseThrow(() -> new RuntimeException("Compte RH non trouvé"));
+
+            // Vérifier l'OTP
+            if (!resetPasswordDTO.getOtp().equals(rhUser.getResetPasswordOtp())) {
+                return ResponseEntity.badRequest().body("Code OTP invalide");
+            }
+
+            // Vérifier l'expiration
+            if (LocalDateTime.now().isAfter(rhUser.getOtpExpiry())) {
+                return ResponseEntity.badRequest().body("Le code OTP a expiré");
+            }
+
+            // Mettre à jour le mot de passe
+            rhUser.setPassword(passwordEncoder.encode(resetPasswordDTO.getNewPassword()));
+            rhUser.setResetPasswordOtp(null);
+            rhUser.setOtpExpiry(null);
+            userRepository.save(rhUser);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Mot de passe réinitialisé avec succès"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la réinitialisation", "error", e.getMessage()));
+        }
+    }
+
+    // Endpoint pour changer le mot de passe (nécessite d'être authentifié)
+    @PostMapping("/rh/change-password")
+    public ResponseEntity<?> changePasswordRH(
+            @RequestBody ChangePasswordDTO changePasswordDTO,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Vérification auth
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User rhUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            if (!"RH".equals(rhUser.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux RH");
+            }
+
+            // Vérifier l'ancien mot de passe
+            if (!passwordEncoder.matches(changePasswordDTO.getCurrentPassword(), rhUser.getPassword())) {
+                return ResponseEntity.badRequest().body("Mot de passe actuel incorrect");
+            }
+
+            // Mettre à jour le mot de passe
+            rhUser.setPassword(passwordEncoder.encode(changePasswordDTO.getNewPassword()));
+            userRepository.save(rhUser);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Mot de passe changé avec succès"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors du changement de mot de passe", "error", e.getMessage()));
+        }
+    }
+
+    private String generateOTP() {
+        // Génère un OTP de 6 chiffres
+        return String.format("%06d", new Random().nextInt(999999));
+    }
+
+
+
+    @PostMapping("/login/rh")
+    public ResponseEntity<?> loginRH(@RequestBody AuthDTO authDTO) {
+        try {
+            // Trouver l'utilisateur RH
+            User user = userRepository.findByEmail(authDTO.getEmail())
+                    .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
+
+            // Vérification du mot de passe
+            if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email ou mot de passe incorrect"));
+            }
+
+            // Vérification du rôle RH
+            if (!"RH".equals(user.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Non autorisé"));
+            }
+
+            // Génération du token
+            String token = jwtTokenService.generateToken(user.getId());  // On passe le ID ici (Long)
+
+            return ResponseEntity.ok(Map.of("token", token, "user", user));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Erreur lors de la connexion RH", "error", e.getMessage()));
+        }
+    }
+
     //Inscription Stagiaire
     @PostMapping("/register/stagiaire")
     public ResponseEntity<?> register(@RequestBody AuthDTO authDTO) {
@@ -107,29 +239,210 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/login/rh")
-    public ResponseEntity<?> loginRH(@RequestBody AuthDTO authDTO) {
+    // Endpoint pour demander une réinitialisation de mot de passe (Stagiaire)
+    @PostMapping("/stagiaire/request-password-reset")
+    public ResponseEntity<?> requestPasswordResetStagiaire(@RequestBody Map<String, String> request) {
         try {
-            // Trouver l'utilisateur RH
-            User user = userRepository.findByEmail(authDTO.getEmail())
-                    .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
+            String email = request.get("email");
 
-            // Vérification du mot de passe
-            if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email ou mot de passe incorrect"));
+            User stagiaire = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Aucun compte trouvé avec cet email"));
+
+            // Vérifier que c'est bien un stagiaire
+            if (!"STAGIAIRE".equals(stagiaire.getRole())) {
+                return ResponseEntity.badRequest().body("Cette fonctionnalité est réservée aux stagiaires");
             }
 
-            // Vérification du rôle RH
-            if (!"RH".equals(user.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Non autorisé"));
-            }
+            // Générer un code OTP
+            String otp = generateOTP();
+            stagiaire.setResetPasswordOtp(otp);
+            stagiaire.setOtpExpiry(LocalDateTime.now().plusMinutes(15));
+            userRepository.save(stagiaire);
 
-            // Génération du token
-            String token = jwtTokenService.generateToken(user.getId());  // On passe le ID ici (Long)
+            // Envoyer l'email avec le code OTP
+            emailService.sendOTPEmail(stagiaire.getEmail(), "Réinitialisation de mot de passe", otp);
 
-            return ResponseEntity.ok(Map.of("token", token, "user", user));
+            return ResponseEntity.ok(Map.of(
+                    "message", "Un code OTP a été envoyé à votre adresse email"
+            ));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Erreur lors de la connexion RH", "error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la demande de réinitialisation", "error", e.getMessage()));
+        }
+    }
+
+    // Endpoint pour vérifier l'OTP et réinitialiser le mot de passe (Stagiaire)
+    @PostMapping("/stagiaire/reset-password")
+    public ResponseEntity<?> resetPasswordStagiaire(@RequestBody ResetPasswordDTO resetPasswordDTO) {
+        try {
+            User stagiaire = userRepository.findByEmail(resetPasswordDTO.getEmail())
+                    .orElseThrow(() -> new RuntimeException("Aucun compte trouvé avec cet email"));
+
+            // Vérifier que c'est bien un stagiaire
+            if (!"STAGIAIRE".equals(stagiaire.getRole())) {
+                return ResponseEntity.badRequest().body("Cette fonctionnalité est réservée aux stagiaires");
+            }
+
+            // Vérifier l'OTP
+            if (!resetPasswordDTO.getOtp().equals(stagiaire.getResetPasswordOtp())) {
+                return ResponseEntity.badRequest().body("Code OTP invalide");
+            }
+
+            // Vérifier l'expiration
+            if (LocalDateTime.now().isAfter(stagiaire.getOtpExpiry())) {
+                return ResponseEntity.badRequest().body("Le code OTP a expiré");
+            }
+
+            // Mettre à jour le mot de passe
+            stagiaire.setPassword(passwordEncoder.encode(resetPasswordDTO.getNewPassword()));
+            stagiaire.setResetPasswordOtp(null);
+            stagiaire.setOtpExpiry(null);
+            userRepository.save(stagiaire);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Mot de passe réinitialisé avec succès"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la réinitialisation", "error", e.getMessage()));
+        }
+    }
+
+    // Endpoint pour changer le mot de passe (commun RH/Stagiaire)
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+            @RequestBody ChangePasswordDTO changePasswordDTO,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Vérification auth
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            // Vérifier l'ancien mot de passe
+            if (!passwordEncoder.matches(changePasswordDTO.getCurrentPassword(), user.getPassword())) {
+                return ResponseEntity.badRequest().body("Mot de passe actuel incorrect");
+            }
+
+            // Mettre à jour le mot de passe
+            user.setPassword(passwordEncoder.encode(changePasswordDTO.getNewPassword()));
+            userRepository.save(user);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Mot de passe changé avec succès"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors du changement de mot de passe", "error", e.getMessage()));
+        }
+    }
+
+    // Nouvel endpoint pour la RH pour créer des comptes
+    @PostMapping("/rh/create-account")
+    public ResponseEntity<?> createAccountByRH(
+            @RequestBody CreateAccountByRHDTO createDTO,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Vérification auth RH
+            String token = authHeader.replace("Bearer ", "");
+            Long userId = jwtTokenService.validateAndGetUserId(token);
+            User rhUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+            if (!"RH".equals(rhUser.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé à la RH");
+            }
+
+            // Vérifications communes
+            if (userRepository.existsByEmail(createDTO.getEmail())) {
+                return ResponseEntity.badRequest().body("Email déjà utilisé");
+            }
+
+            if (createDTO.getPassword() == null || createDTO.getPassword().length() < 8) {
+                return ResponseEntity.badRequest().body("Le mot de passe doit contenir au moins 8 caractères");
+            }
+
+            // Validation spécifique au rôle
+            switch (createDTO.getRole()) {
+                case "SECRETAIRE":
+                    if (userRepository.existsByRoleAndDirection("SECRETAIRE", createDTO.getDirection())) {
+                        return ResponseEntity.badRequest().body("Une secrétaire existe déjà pour cette direction");
+                    }
+                    break;
+
+                case "CHEF_SERVICE":
+                    if (userRepository.existsByRoleAndDirectionAndService("CHEF_SERVICE",
+                            createDTO.getDirection(), createDTO.getService())) {
+                        return ResponseEntity.badRequest().body("Un chef de service existe déjà pour ce service");
+                    }
+                    if (userRepository.existsByRoleAndServiceAndDirectionNot("CHEF_SERVICE",
+                            createDTO.getService(), createDTO.getDirection())) {
+                        return ResponseEntity.badRequest().body("Ce service existe déjà dans une autre direction");
+                    }
+                    break;
+
+                case "ENCADREUR":
+                    User chefService = userRepository.findById(createDTO.getChefServiceId())
+                            .orElseThrow(() -> new RuntimeException("Chef de service non trouvé"));
+                    if (!"CHEF_SERVICE".equals(chefService.getRole())) {
+                        return ResponseEntity.badRequest().body("L'ID fourni ne correspond pas à un chef de service");
+                    }
+                    break;
+
+                case "STAGIAIRE":
+                    return ResponseEntity.badRequest().body("Utilisez /register/stagiaire pour les stagiaires");
+
+                default:
+                    return ResponseEntity.badRequest().body("Rôle non valide");
+            }
+
+            // Création de l'utilisateur
+            User user = new User();
+            user.setCivilite(createDTO.getCivilite());
+            user.setNom(createDTO.getNom());
+            user.setPrenom(createDTO.getPrenom());
+            user.setEmail(createDTO.getEmail());
+            user.setPassword(passwordEncoder.encode(createDTO.getPassword()));
+            user.setRole(createDTO.getRole());
+            user.setTelephone(createDTO.getTelephone());
+
+            // Champs spécifiques selon le rôle
+            if (createDTO.getDirection() != null) {
+                user.setDirection(createDTO.getDirection());
+            }
+            if (createDTO.getService() != null) {
+                user.setService(createDTO.getService());
+            }
+            if (createDTO.getChefServiceId() != null) {
+                user.setChefServiceId(createDTO.getChefServiceId());
+
+                // Pour les encadreurs, on récupère les infos du chef de service
+                if ("ENCADREUR".equals(createDTO.getRole())) {
+                    User chef = userRepository.findById(createDTO.getChefServiceId())
+                            .orElseThrow(() -> new RuntimeException("Chef de service non trouvé"));
+                    user.setDirection(chef.getDirection());
+                    user.setService(chef.getService());
+                }
+            }
+
+            userRepository.save(user);
+
+            // Envoi d'email avec les identifiants
+            emailService.sendAccountCreationEmail(
+                    user.getEmail(),
+                    "Votre compte a été créé",
+                    createDTO.getEmail(),
+                    createDTO.getPassword()
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Compte créé avec succès",
+                    "userId", user.getId()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la création du compte", "error", e.getMessage()));
         }
     }
 
@@ -152,58 +465,102 @@ public class AuthController {
         }
     }
 
-    // Mot de passe oublié - Demande de réinitialisation
-    @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
-        try {
-            String email = request.get("email");
-            User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new RuntimeException("Aucun compte trouvé avec cet email"));
 
-            // Générer un token de réinitialisation (valide 1h)
-            String resetToken = jwtTokenService.generatePasswordResetToken(user.getId());
+    // Connexion Secrétaire
+        @PostMapping("/login/secretaire")
+        public ResponseEntity<?> loginSecretaire(@RequestBody AuthDTO authDTO) {
+            try {
+                User user = userRepository.findByEmail(authDTO.getEmail())
+                        .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
 
-            // Lien de réinitialisation
-            String resetLink = "http://localhost:3000/reset-password?token=" + resetToken;
+                if (!"SECRETAIRE".equals(user.getRole())) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body("Accès réservé aux secrétaires");
+                }
 
-            // Envoyer l'email réel
-            emailService.ForgotPassword(user.getEmail(), "Réinitialisation du mot de passe", resetLink);
+                if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                            .body("Email ou mot de passe incorrect");
+                }
 
-            return ResponseEntity.ok(Map.of(
-                    "message", "Si un compte existe avec cet email, un lien a été envoyé"
-                    // Ne pas renvoyer le token ici en production
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", e.getMessage()));
+                String token = jwtTokenService.generateToken(user.getId());
+                user.setLastLogin(LocalDateTime.now());
+                userRepository.save(user);
+
+                return ResponseEntity.ok(Map.of(
+                        "token", token,
+                        "user", user
+                ));
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(e.getMessage());
+            }
         }
-    }
 
-    // Réinitialisation du mot de passe
-    @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+    // Connexion Chef de Service
+    @PostMapping("/login/chef-service")
+    public ResponseEntity<?> loginChefService(@RequestBody AuthDTO authDTO) {
         try {
-            String token = request.get("token");
-            String newPassword = request.get("newPassword");
-            String confirmPassword = request.get("confirmPassword");
+            User user = userRepository.findByEmail(authDTO.getEmail())
+                    .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
 
-            if (!newPassword.equals(confirmPassword)) {
-                return ResponseEntity.badRequest().body("Les mots de passe ne correspondent pas");
+            if (!"CHEF_SERVICE".equals(user.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Accès réservé aux chefs de service");
             }
 
-            Long userId = jwtTokenService.validatePasswordResetToken(token);
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+            if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("Email ou mot de passe incorrect");
+            }
 
-            user.setPassword(passwordEncoder.encode(newPassword));
+            String token = jwtTokenService.generateToken(user.getId());
+            user.setLastLogin(LocalDateTime.now());
             userRepository.save(user);
 
-            return ResponseEntity.ok(Map.of("message", "Mot de passe réinitialisé avec succès"));
+            return ResponseEntity.ok(Map.of(
+                    "token", token,
+                    "user", user,
+                    "service", user.getService() // Retourne le service dans la réponse
+            ));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(e.getMessage());
         }
     }
 
+       // Connexion Encadreur
+    @PostMapping("/login/encadreur")
+    public ResponseEntity<?> loginEncadreur(@RequestBody AuthDTO authDTO) {
+        try {
+            User user = userRepository.findByEmail(authDTO.getEmail())
+                    .orElseThrow(() -> new RuntimeException("Email ou mot de passe incorrect"));
+
+            if (!"ENCADREUR".equals(user.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Accès réservé aux encadreurs");
+            }
+
+            if (!passwordEncoder.matches(authDTO.getPassword(), user.getPassword())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("Email ou mot de passe incorrect");
+            }
+
+            String token = jwtTokenService.generateToken(user.getId());
+            user.setLastLogin(LocalDateTime.now());
+            userRepository.save(user);
+
+            return ResponseEntity.ok(Map.of(
+                    "token", token,
+                    "user", user
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(e.getMessage());
+        }
+    }
 
 }
+
+
+

@@ -102,6 +102,7 @@ public class DocumentGenerationService {
             document.add(new Paragraph(" "));
 
             // Corps du document
+            // Modifiez cette partie pour utiliser les dates finales
             String stageInfo = String.format(
                     "    %s %s %s, étudiante en %s à %s dans la filière %s, est autorisée à effectuer un stage académique non rémunéré et non renouvelable au Port Autonome de Cotonou du %s au %s.\n",
                     user.getCivilite(),
